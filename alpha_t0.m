@@ -15,11 +15,12 @@
 % 7/23/2024 - go line by line to verify
 % 7/31/2024 - Update hdI to be a delta function
 % 8/9/2024 - go back to hdI = 1/(gamma + SEs)
+% 8/14/2024 - added to git repo
 clear all
 close all
 
 % set a seed for reproducibility
-seed = 42;
+seed = 264;
 rng(seed);
 
 % number of sensors
@@ -81,7 +82,7 @@ all_g = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),
 rayleigh_factor = 1/sqrt(2);
 E_mag_g_sqr = 2*rayleigh_factor^2;
 
-all_schemes = ["EPC","NPC"];
+all_schemes = ["EMPC","PPC","NPC"];
 
 scheme_dict = dictionary(all_schemes,1:length(all_schemes));
 
@@ -129,8 +130,6 @@ for sensor_db_idx = 1:length(sensor_db_values)
         s_i_true = m_sensors .* sensor_signal(t - tau_sensors - t0_true);
         Ei = sum(abs(s_i_true).^2 .* dt,1);
         xi = alpha_true * s_i_true + scaled_w(:,1:S,:,:);
-
-        Es = sum(abs(sensor_signal(t)).^2 .* dt);
 
         % iterate through channel snr values
         for channel_db_idx = 1:length(channel_db_values)
@@ -181,7 +180,7 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     d = (right_val-left_val)/GR;
                     x1 = left_val + d;
                     x2 = right_val - d;
-                    % if all 
+
                     if (sum(sum(abs(x1-x2) < 1E-3)) == nTrials*nDeployments)
                         break;
                     end
@@ -216,86 +215,131 @@ for sensor_db_idx = 1:length(sensor_db_values)
 
                 if scheme ~= "MLE"
                     fs = 1/dt;
-                    L = (K-1);
+                    L = K-1;
                     f = 0:fs/(2*L):fs/2;
                     indet_idx = find(abs(round(f,4)) == 0.5);
                     omega = 2*pi*f;
     
-                    if (scheme == "NPC" || scheme == "PPC")
-                        V = Beta .* var_w .*(1+cos(omega)) ./ (omega.^2 - pi^2).^2 + var_n;
-                    else
-                        V = Beta .* var_w .*(1+cos(omega)) ./ (omega.^2 - pi^2).^2 + var_n/2;
-                    end
-                    mag_sqr_H = 1./V;
-        
-                    for idx=indet_idx
-                        % fill by L'Hopital's
-                        mag_sqr_H(1,idx,:) = 8*pi^2 / (Beta .* var_w); 
-                    end
+                    % C1 = Beta .* var_w;
+                    % if (scheme == "NPC" || scheme == "PPC")
+                    %     V = Beta .* var_w .*(1+cos(omega)) ./ (omega.^2 - pi^2).^2 + var_n;
+                    %     C2 = var_n;
+                    % else
+                    %     V = Beta .* var_w .*(1+cos(omega)) ./ (omega.^2 - pi^2).^2 + var_n/2;
+                    %     C2 = var_n/2;
+                    % end
+                    % mag_sqr_H = 1./V;
+                    % 
+                    % for idx=indet_idx
+                    %     % fill by L'Hopital's
+                    %     disp('filling indeterminate values')
+                    %     % mag_sqr_H(1,idx,:) = 8*pi^2 / (Beta .* var_w); 
+                    %     mag_sqr_H(1,idx,:) = 8*pi^2 / (C2*8*pi^2 + C1);
+                    % end
 
                     % each time index y(t) requires its own matrix multiplication hence I added the singleton dimension
                     y = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments) + pagetranspose(scaled_n(:,3,:,:));
                     % v = reshape(matched_filter_integral(reshape(scaled_w(:,1:S,:,:),K,S,1,nTrials,nDeployments),m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments) + pagetranspose(scaled_n(:,3,:,:));
     
                     if (scheme == "NPC" || scheme == "PPC")
-                        rc = real(channel_gains);
-                        ic = imag(channel_gains);
+                        real_channel = real(channel_gains);
+                        imag_channel = imag(channel_gains);
     
-                        b = sum(rc.*ic.*m_sensors.^2,2) ./ (sum(rc.^2 .* m_sensors.^2,2) - sum(ic.^2 .* m_sensors.^2,2));
+                        b = sum(real_channel.*imag_channel.*m_sensors.^2,2) ./ (sum( (real_channel.^2 - imag_channel.^2) .* m_sensors.^2,2));
 
                         disc = 1 + 4.*b.^2;
                         a1 = (-1 + sqrt(disc)) ./ (2*b);
                         a2 = (-1 - sqrt(disc)) ./ (2*b);
                         a = a1;
 
-                        mag_sqr_SHdI = 1;
-    
-                        SKndR = mag_sqr_SHdI .* (Es.*var_w .* sum(m_sensors.^2 .* (a.*rc - ic).^2,2) + (var_n/2 .* (a.^2 + 1)));
-                        SKndI = mag_sqr_SHdI .* (Es.*var_w .* sum(m_sensors.^2 .* (rc + a.*ic).^2,2) + (var_n/2 .* (a.^2 + 1)));
+                        SEs = ones(size(V)) .* (2 * pi^2 * (1+cos(omega)) ./ (omega.^2 - pi^2).^2);
+                        gamma = 1;
 
-                        A = SKndR;
-                        B = SKndI;
+                        mag_sqr_SHdI = 1 ./ (gamma + SEs);
+
+                        for idx=indet_idx
+                            disp('filling indeterminate values')
+                            % fill by L'Hopital's
+                            mag_sqr_SHdI(1,idx,:) = 8*w0^2 / (gamma*8*w0^2 - 2*pi^2*cos(w0));
+                        end
+
+                        mag_SHdI = sqrt(mag_sqr_SHdI);
+
+                        [hdI, hdI_matrix] = get_time_domain(mag_SHdI,dt,nDeployments);
     
+                        hdR_matrix = reshape(a,1,1,nDeployments) .* hdI_matrix;
+
+                        hd_matrix = hdR_matrix + 1i*hdI_matrix;
+
+                        pR = var_w * sum(m_sensors.^2 .* (a.*real_channel - imag_channel).^2);
+                        qR = (var_n/2 * (a.^2 + 1)) - gamma*pR;
+
+                        pI = var_w * sum(m_sensors.^2 .* (real_channel + a.*imag_channel).^2);
+                        qI = (var_n/2 * (a.^2 + 1)) - gamma*pI;
+
+                        SKndR = pR + mag_sqr_SHdI .* qR;
+                        SKndI = pI + mag_sqr_SHdI .* qI;
+
+                        if sum(SKndR < 0, "all")
+                            error("SKndR less than 0!")
+                        elseif sum(SKndI < 0, "all")
+                            error("SKndI less than 0!")
+                        end
+
+                        SQnR = 1 ./ SKndR;
+                        SQnI = 1 ./ SKndI;
+    
+                        [~,QnR_matrix] = get_time_domain(SQnR,dt,nDeployments);
+                        [~,QnI_matrix] = get_time_domain(SQnI,dt,nDeployments);
+
                         %%% for alpha
                         % I didn't know what to name this but it's sum gi int si(tau - t0_estimates) si(tau-t) dtau
                         % SINCE EACH ESTIMATED t0 is DIFFERENT, then WE HAVE DIFFERENT VALUES ACROSS TRIALS
                         % aaa = reshape(sum(reshape(channel_gains,1,S,1,1,nDeployments) .* sum(m_sensors.^2 .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments) .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))),1)*dt,2),1,K,nTrials,nDeployments);
                         aaa = reshape(matched_filter_integral(m_sensors .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
 
+                        % aaaR = reshape(real(aaa),1,length(t),nTrials,nDeployments);
+                        % aaaI = reshape(imag(aaa),1,length(t),nTrials,nDeployments);
                         aaaR = real(aaa);
                         aaaI = imag(aaa);
-    
+
                         % the d here stands for decorrelation, NOT derivative,
                         % matches paper notation exactly
-                        % aaadR = dt*(pagemtimes(aaaR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(aaaI,reshape(hdI_matrix,K,K,1,nDeployments)));
-                        % aaadI = dt*(pagemtimes(aaaI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(aaaR,reshape(hdI_matrix,K,K,1,nDeployments)));
-                        aaadR = (a.*aaaR - aaaI);
-                        aaadI = (a.*aaaI + aaaR);
+                        aaadR = dt*(pagemtimes(aaaR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(aaaI,reshape(hdI_matrix,K,K,1,nDeployments)));
+                        aaadI = dt*(pagemtimes(aaaI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(aaaR,reshape(hdI_matrix,K,K,1,nDeployments)));
 
                         yR = real(y);
                         yI = imag(y);
-
-                        ydR = (a.*yR - yI);
-                        ydI = (a.*yI + yR);
-
-                        num = (1/A).*pagemtimes(ydR,pagetranspose(aaadR)).*dt + (1/B).*pagemtimes(ydI,pagetranspose(aaadI)).*dt;
-                        denom = (1/A).*pagemtimes(aaadR,pagetranspose(aaadR)).*dt + (1/B).*pagemtimes(aaadI,pagetranspose(aaadI)).*dt;
     
-                        % ydR = dt*(pagemtimes(yR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(yI,reshape(hdI_matrix,K,K,1,nDeployments)));
-                        % ydI = dt*(pagemtimes(yI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(yR,reshape(hdI_matrix,K,K,1,nDeployments)));
-                        % 
-                        % resh_QnR_matrix = reshape(QnR_matrix,length(t),length(t),1,nDeployments);
-                        % resh_QnI_matrix = reshape(QnI_matrix,length(t),length(t),1,nDeployments);
-                        % 
-                        % num1 = pagemtimes(pagemtimes(ydR,resh_QnR_matrix),pagetranspose(aaadR));
-                        % num2 = pagemtimes(pagemtimes(ydI,resh_QnI_matrix),pagetranspose(aaadI));
-                        % num = dt*dt*(num1+num2);
-                        % 
-                        % denom1 = pagemtimes(pagemtimes(aaadR,resh_QnR_matrix),pagetranspose(aaadR));
-                        % denom2 = pagemtimes(pagemtimes(aaadI,resh_QnI_matrix),pagetranspose(aaadI));
-                        % denom = dt*dt*(denom1+denom2);
-                        %%% 
+                        ydR = dt*(pagemtimes(yR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(yI,reshape(hdI_matrix,K,K,1,nDeployments)));
+                        ydI = dt*(pagemtimes(yI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(yR,reshape(hdI_matrix,K,K,1,nDeployments)));
+
+                        resh_QnR_matrix = reshape(QnR_matrix,length(t),length(t),1,nDeployments);
+                        resh_QnI_matrix = reshape(QnI_matrix,length(t),length(t),1,nDeployments);
+
+                        num1 = pagemtimes(pagemtimes(ydR,resh_QnR_matrix),pagetranspose(aaadR));
+                        num2 = pagemtimes(pagemtimes(ydI,resh_QnI_matrix),pagetranspose(aaadI));
+                        num = dt*dt*(num1+num2);
+
+                        denom1 = pagemtimes(pagemtimes(aaadR,resh_QnR_matrix),pagetranspose(aaadR));
+                        denom2 = pagemtimes(pagemtimes(aaadI,resh_QnI_matrix),pagetranspose(aaadI));
+                        denom = dt*dt*(denom1+denom2);
+                        %%%
                     else
+                        C1 = Beta .* var_w;
+                        C2 = var_n/2;
+
+                        V = Beta .* var_w .*(1+cos(omega)) ./ (omega.^2 - pi^2).^2 + var_n/2;
+                            
+                        mag_sqr_H = 1./V;
+            
+                        for idx=indet_idx
+                            % fill by L'Hopital's
+                            disp('filling indeterminate values')
+                            % mag_sqr_H(1,idx,:) = 8*pi^2 / (Beta .* var_w); 
+                            mag_sqr_H(1,idx,:) = 8*pi^2 / (C2*8*pi^2 + C1);
+                        end
+
                         [Qn,Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments);
                         Omega = matched_filter_integral(m_sensors .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt);
                     
@@ -330,37 +374,24 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     crlb(1,sensor_db_idx,channel_db_idx,2,scheme_idx,sensor_idx,:) = var_w / sum(sum((alpha_true .* m_sensors .* temp).^2 * dt,1),2);
                 else
                     if (scheme == "NPC" || scheme == "PPC")
-
-                        reduced_a = reshape(a,1,1,nDeployments);
-                        reduced_A = reshape(A,1,1,nDeployments);
-                        reduced_B = reshape(B,1,1,nDeployments);
                         
                         %%% for alpha
-                        dsdR_alpha = (reduced_a.*real(dsalpha) - imag(dsalpha));
-                        dsdI_alpha = (reduced_a.*imag(dsalpha) + real(dsalpha));
-                        
-                        temp_alpha = (1/reduced_A).*pagemtimes(pagetranspose(dsdR_alpha),dsdR_alpha).*dt + (1/reduced_B).*pagemtimes(pagetranspose(dsdI_alpha),dsdI_alpha).*dt;
-                        
-                        % dsdR_alpha = dt*(pagemtimes(pagetranspose(real(dsalpha)),hdR_matrix) - pagemtimes(pagetranspose(imag(dsalpha)),hdI_matrix));
-                        % dsdI_alpha = dt*(pagemtimes(pagetranspose(imag(dsalpha)),hdR_matrix) + pagemtimes(pagetranspose(real(dsalpha)),hdI_matrix));
-                        % 
-                        % temp_alpha = dt*dt*(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)));
+                        dsdR_alpha = dt*(pagemtimes(pagetranspose(real(dsalpha)),hdR_matrix) - pagemtimes(pagetranspose(imag(dsalpha)),hdI_matrix));
+                        dsdI_alpha = dt*(pagemtimes(pagetranspose(imag(dsalpha)),hdR_matrix) + pagemtimes(pagetranspose(real(dsalpha)),hdI_matrix));
+
+                        temp_alpha = dt*dt*(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)));
                         
                         %%% for t0
-                        dsdR_t0 = (reduced_a.*real(dst0) - imag(dst0));
-                        dsdI_t0 = (reduced_a.*imag(dst0) + real(dst0));
-                        
-                        temp_t0 = (1/reduced_A).*pagemtimes(pagetranspose(dsdR_t0),dsdR_t0).*dt + (1/reduced_B).*pagemtimes(pagetranspose(dsdI_t0),dsdI_t0).*dt;
-                        
-                        % dsdR_t0 = dt*(pagemtimes(pagetranspose(real(dst0)),hdR_matrix) - pagemtimes(pagetranspose(imag(dst0)),hdI_matrix));
-                        % dsdI_t0 = dt*(pagemtimes(pagetranspose(imag(dst0)),hdR_matrix) + pagemtimes(pagetranspose(real(dst0)),hdI_matrix));
-                        % 
-                        % temp_t0 = dt*dt*(pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)));
-                        
-                        fisher_matrix = dt*[(1/reduced_A).*pagemtimes(pagetranspose(dsdR_alpha),dsdR_alpha) + (1/reduced_B).*pagemtimes(pagetranspose(dsdI_alpha),dsdI_alpha)...
-                                    (1/reduced_A).*pagemtimes(pagetranspose(dsdR_t0),dsdR_alpha) + (1/reduced_B).*pagemtimes(pagetranspose(dsdI_t0),dsdI_alpha);...
-                                    (1/reduced_A).*pagemtimes(pagetranspose(dsdR_t0),dsdR_alpha) + (1/reduced_B).*pagemtimes(pagetranspose(dsdI_t0),dsdI_alpha)...
-                                    (1/reduced_A).*pagemtimes(pagetranspose(dsdR_t0),dsdR_t0) + (1/reduced_B).*pagemtimes(pagetranspose(dsdI_t0),dsdI_t0)];
+                        dsdR_t0 = dt*(pagemtimes(pagetranspose(real(dst0)),hdR_matrix) - pagemtimes(pagetranspose(imag(dst0)),hdI_matrix));
+                        dsdI_t0 = dt*(pagemtimes(pagetranspose(imag(dst0)),hdR_matrix) + pagemtimes(pagetranspose(real(dst0)),hdI_matrix));
+
+                        temp_t0 = dt*dt*(pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)));
+                     
+                        fisher_matrix = dt*dt*[(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)))...
+                                    (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)));...
+                                    (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)))...
+                                    (pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)))];
+
                         inv_zz = pageinv(fisher_matrix);
                         crlb(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = inv_zz(1,1,:);
                         crlb(1,sensor_db_idx,channel_db_idx,2,scheme_idx,sensor_idx,:) = inv_zz(2,2,:);
@@ -396,6 +427,7 @@ bias = squeeze(bias);
 %% save results
 % save("results.mat")
 %% linear plots
+params = ["\alpha","t_0"];
 if show_plots
     color_vec = ['r','g','b'];
     deployments_highlighted = min(6,nDeployments);
@@ -407,44 +439,27 @@ if show_plots
             % set(fig1,'Position',[100,100,1600,400])
             tiledlayout(3,4);
             for ii  = 1:deployments_highlighted
-                nexttile
-                hold on
-                for sensor_idx = 1:length(sensor_vals)
-                    plot(nan,nan,'color',color_vec(sensor_idx));
+                % for alpha and t0
+                for jj = 1:2
+                    nexttile
+                    hold on
+                    for sensor_idx = 1:length(sensor_vals)
+                        plot(nan,nan,'color',color_vec(scheme_idx));
+                    end
+                    plot(nan,nan,'^','color','black');
+                    plot(nan,nan,'x','color','black');
+                    plot(nan,nan,'o','color','black');
+
+                    for sensor_idx = 1:length(sensor_vals)
+                        plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(scheme_idx))
+                        plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(scheme_idx))
+                        plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(scheme_idx))
+                    end
+                    xlabel('Channel SNR (dB)','Interpreter','latex')
+                    ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
+                    legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
+                    title(params(jj) + " Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
                 end
-                plot(nan,nan,'^','color','black');
-                plot(nan,nan,'x','color','black');
-                plot(nan,nan,'o','color','black');
-        
-                for sensor_idx = 1:length(sensor_vals)
-                    plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,1,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
-                    plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,1,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
-                    plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,1,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
-                end
-                xlabel('Channel SNR (dB)','Interpreter','latex')
-                ylabel('$$\mathrm{E}\{(\hat{\alpha}-\alpha)^2\}$$','Interpreter','latex')
-                legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
-                title("\alpha Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
-        
-                % t0 plots
-                nexttile
-                hold on
-                for sensor_idx = 1:length(sensor_vals)
-                    plot(nan,nan,'color',color_vec(sensor_idx));
-                end
-                plot(nan,nan,'^','color','black');
-                plot(nan,nan,'x','color','black');
-                plot(nan,nan,'o','color','black');
-        
-                for sensor_idx = 1:length(sensor_vals)
-                    plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,2,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
-                    plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,2,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
-                    plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,2,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
-                end
-                xlabel('Channel SNR (dB)','Interpreter','latex')
-                ylabel('$$\mathrm{E}\{(\hat{t_0}-t_0)^2\}$$','Interpreter','latex')
-                legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
-                title("t_0 Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
             end
             sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
         end
