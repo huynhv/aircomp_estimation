@@ -26,13 +26,13 @@ rng(seed);
 % number of sensors
 sensor_vals = [5,10];
 % number of deployments
-nDeployments = 6;
+nDeployments = 50;
 % number of trials
-nTrials = 10000;
+nTrials = 1000;
 % number of measurements per sensor, starting from 0 then 100 sample means K = 101
 K = 101;
 
-show_plots = true;
+show_plots = false;
 
 % Window length in seconds
 T_obs = 5;
@@ -88,6 +88,9 @@ scheme_dict = dictionary(all_schemes,1:length(all_schemes));
 
 selected_schemes = all_schemes;
 
+save_t0 = [];
+save_alpha = [];
+
 % generate m and tau
 all_m = unifrnd(lower,upper,1,max(sensor_vals));
 all_tau = unifrnd(0,max_tau,1,max(sensor_vals));
@@ -121,9 +124,6 @@ for sensor_db_idx = 1:length(sensor_db_values)
         % select subset of m, tau, and g values
         m_sensors = all_m(:,1:S);
         tau_sensors = all_tau(:,1:S);
-        %%%
-        % tau_sensors = zeros(size(tau_sensors));
-        %%%
         g = all_g(:,1:S,:,:);
 
         % calculate quantized phase compensation
@@ -152,26 +152,11 @@ for sensor_db_idx = 1:length(sensor_db_values)
                 elseif scheme == "EPC"
                     channel_gains = abs(g);
                     Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2);
-                % elseif scheme == "PPCR"
-                %     channel_gains = real(qg);
-                %     Beta = 2 * pi^2 * sum(real(qg).^2 .* m_sensors.^2);
-                % elseif scheme == "PPCI"
-                %     channel_gains = imag(qg);
-                %     Beta = 2 * pi^2 * sum(imag(qg).^2 .* m_sensors.^2);
                 elseif scheme == "PPC"
                     channel_gains = qg;
                     Beta = 2 * pi^2 * sum(abs(qg).^2 .* m_sensors.^2);
-                % elseif scheme == "NPCR"
-                %     channel_gains = real(g);
-                %     Beta = 2 * pi^2 * sum(real(g).^2 .* m_sensors.^2);
-                % elseif scheme == "NPCI"
-                %     channel_gains = imag(g);
-                %     Beta = 2 * pi^2 * sum(imag(g).^2 .* m_sensors.^2);
                 elseif scheme == "NPC"
                     channel_gains = g;
-                    %%%
-                    channel_gains = real(g) + 1i.* abs(imag(g));
-                    %%%
                     Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2);
                 end
 
@@ -211,8 +196,8 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     left_val(swap_lv) = x2(swap_lv);
                     right_val(swap_rv) = x1(swap_rv);
                 end
-                t0_estimates = (x1+x2)/2;
-                % t0_estimates = t0_true*ones(size(x1));
+                % t0_estimates = (x1+x2)/2;
+                t0_estimates = t0_true*ones(size(x1));
                 
                 if scheme == "MLE"
                     alpha_estimates = sum(channel_gains .* sum(xi .* m_sensors .* sensor_signal(t-tau_sensors-t0_estimates),1) * dt,2) ./ sum(Ei,2);
@@ -337,6 +322,11 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     % we determine the magnitude of alpha
                     alpha_estimates = num ./ denom;
                     % alpha_estimates(alpha_estimates < 0) = 0;
+                    
+                    % if S == 10
+                    %     save_t0 = cat(4,save_t0,t0_estimates(:,:,:,5));
+                    %     save_alpha = cat(4,save_alpha,alpha_estimates(:,:,:,5));
+                    % end
                 end
 
                 empirical_var(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = var(alpha_estimates,0,3);
@@ -415,7 +405,7 @@ bias = squeeze(bias);
 % save("results.mat")
 %% linear plots
 params = ["\alpha","t_0"];
-if show_plotss
+if show_plots
     color_vec = ['r','g','b'];
     deployments_highlighted = min(6,nDeployments);
     
