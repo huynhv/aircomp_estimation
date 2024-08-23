@@ -82,7 +82,7 @@ all_g = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),
 rayleigh_factor = 1/sqrt(2);
 E_mag_g_sqr = 2*rayleigh_factor^2;
 
-all_schemes = ["EMPC","EPC","PPC","NPC"];
+all_schemes = ["NPC"];
 
 scheme_dict = dictionary(all_schemes,1:length(all_schemes));
 
@@ -121,6 +121,9 @@ for sensor_db_idx = 1:length(sensor_db_values)
         % select subset of m, tau, and g values
         m_sensors = all_m(:,1:S);
         tau_sensors = all_tau(:,1:S);
+        %%%
+        % tau_sensors = zeros(size(tau_sensors));
+        %%%
         g = all_g(:,1:S,:,:);
 
         % calculate quantized phase compensation
@@ -166,6 +169,9 @@ for sensor_db_idx = 1:length(sensor_db_values)
                 %     Beta = 2 * pi^2 * sum(imag(g).^2 .* m_sensors.^2);
                 elseif scheme == "NPC"
                     channel_gains = g;
+                    %%%
+                    channel_gains = real(g) + 1i.* abs(imag(g));
+                    %%%
                     Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2);
                 end
 
@@ -234,7 +240,7 @@ for sensor_db_idx = 1:length(sensor_db_values)
                         a2 = (-1 - sqrt(disc)) ./ (2*b);
                         a = a1;
 
-                        SEs = ones(size(V)) .* (2 * pi^2 * (1+cos(omega)) ./ (omega.^2 - pi^2).^2);
+                        SEs = ones(1,K,1,nDeployments) .* (2 * pi^2 * (1+cos(omega)) ./ (omega.^2 - pi^2).^2);
                         gamma = 1;
 
                         mag_sqr_SHdI = 1 ./ (gamma + SEs);
@@ -409,7 +415,7 @@ bias = squeeze(bias);
 % save("results.mat")
 %% linear plots
 params = ["\alpha","t_0"];
-if show_plots
+if show_plotss
     color_vec = ['r','g','b'];
     deployments_highlighted = min(6,nDeployments);
     
