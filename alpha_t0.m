@@ -24,9 +24,9 @@ seed = 264;
 rng(seed);
 
 % number of sensors
-sensor_vals = [10];
+sensor_vals = [5,10];
 % number of deployments
-nDeployments = 4;
+nDeployments = 6;
 % number of trials
 nTrials = 10000;
 % number of measurements per sensor, starting from 0 then 100 sample means K = 101
@@ -422,6 +422,7 @@ if show_plots
             for ii  = 1:deployments_highlighted
                 % for alpha and t0
                 for jj = 1:2
+                    all_vals = [];
                     nexttile
                     hold on
                     for sensor_idx = 1:length(sensor_vals)
@@ -435,18 +436,15 @@ if show_plots
                         plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
                         plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
                         plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
-                    end
-
-                    all_vals = [squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
+                        all_vals = [all_vals; squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
                         squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
                         squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii))];
+                    end
 
                     xlabel('Channel SNR (dB)','Interpreter','latex')
                     ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
                     legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
-                    if jj == 2
-                        ylim([0,1.1*(max(all_vals))])
-                    end
+                    ylim([0,1.1*(max(all_vals))])
                     title(params(jj) + " Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
                 end
             end
