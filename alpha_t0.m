@@ -24,7 +24,7 @@ seed = 264;
 rng(seed);
 
 % number of sensors
-sensor_vals = [5,10];
+sensor_vals = [5];
 % number of deployments
 nDeployments = 50;
 % number of trials
@@ -32,7 +32,7 @@ nTrials = 1000;
 % number of measurements per sensor, starting from 0 then 100 sample means K = 101
 K = 101;
 
-show_plots = false;
+show_plots = true;
 
 % Window length in seconds
 T_obs = 5;
@@ -148,10 +148,10 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     channel_gains = ones(size(g));
                 elseif scheme == "EMPC"
                     channel_gains = ones(size(g));
-                    Beta = 2 * pi^2 * sum(ones(size(g)) .* m_sensors.^2);
+                    Beta = 2 * pi^2 * sum(ones(size(g)) .* m_sensors.^2,2);
                 elseif scheme == "EPC"
                     channel_gains = abs(g);
-                    Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2);
+                    Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2,2);
                 elseif scheme == "PPC"
                     channel_gains = qg;
                     Beta = 2 * pi^2 * sum(abs(qg).^2 .* m_sensors.^2);
@@ -397,25 +397,25 @@ end
 runtime = toc(loopTic);
 disp(floor(runtime/60) + " minutes " + mod(runtime,60) + " seconds")
 
-evar = squeeze(empirical_var);
-emse = squeeze(empirical_mse);
-bias = squeeze(bias);
-
 %% save results
 % save("results.mat")
-%% linear plots
+
+%% average results over deployments
+avg_dep_var = mean(empirical_var,length(size(empirical_var)));
+avg_dep_mse = mean(empirical_mse,length(size(empirical_mse)));
+avg_dep_crlb = mean(crlb,length(size(crlb)));
+
+%% avg linear plots
 params = ["\alpha","t_0"];
+color_vec = ["#A2142F","#0072BD","#7E2F8E"];
 if show_plots
-    color_vec = ['r','g','b'];
-    deployments_highlighted = min(6,nDeployments);
-    
     for sensor_db_idx = 1:length(sensor_db_values)
         for scheme_idx = 1:length(selected_schemes)
             fig1 = figure;
             set(fig1,'WindowState', 'maximized');
             % set(fig1,'Position',[100,100,1600,400])
-            tiledlayout(3,4);
-            for ii  = 1:deployments_highlighted
+            tiledlayout(1,2);
+            for ii  = 1
                 % for alpha and t0
                 for jj = 1:2
                     all_vals = [];
@@ -429,25 +429,72 @@ if show_plots
                     plot(nan,nan,'o','color','black');
 
                     for sensor_idx = 1:length(sensor_vals)
-                        plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
-                        plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
-                        plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
-                        all_vals = [all_vals; squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
-                        squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
-                        squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii))];
+                        plot(channel_db_values,squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
+                        plot(channel_db_values,squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
+                        plot(channel_db_values,squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
+                        all_vals = [all_vals; squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
+                        squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
+                        squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii))];
                     end
 
                     xlabel('Channel SNR (dB)','Interpreter','latex')
                     ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
                     legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
                     ylim([0,1.1*(max(all_vals))])
-                    title(params(jj) + " Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
+                    title(params(jj) + " Estimation")
                 end
             end
             sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
         end
     end
 end
+%% individual linear plots
+
+% params = ["\alpha","t_0"];
+% color_vec = ["#A2142F","#0072BD","#7E2F8E"];
+% if show_plots
+%     deployments_highlighted = min(6,nDeployments);
+% 
+%     for sensor_db_idx = 1:length(sensor_db_values)
+%         for scheme_idx = 1:length(selected_schemes)
+%             fig1 = figure;
+%             set(fig1,'WindowState', 'maximized');
+%             % set(fig1,'Position',[100,100,1600,400])
+%             tiledlayout(3,4);
+%             for ii  = 1:deployments_highlighted
+%                 % for alpha and t0
+%                 for jj = 1:2
+%                     all_vals = [];
+%                     nexttile
+%                     hold on
+%                     for sensor_idx = 1:length(sensor_vals)
+%                         plot(nan,nan,'color',color_vec(sensor_idx));
+%                     end
+%                     plot(nan,nan,'^','color','black');
+%                     plot(nan,nan,'x','color','black');
+%                     plot(nan,nan,'o','color','black');
+% 
+%                     for sensor_idx = 1:length(sensor_vals)
+%                         plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
+%                         plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
+%                         plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
+%                         all_vals = [all_vals; squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
+%                         squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
+%                         squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii))];
+%                     end
+% 
+%                     xlabel('Channel SNR (dB)','Interpreter','latex')
+%                     ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
+%                     legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
+%                     ylim([0,1.1*(max(all_vals))])
+%                     title(params(jj) + " Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
+%                 end
+%             end
+%             sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
+%         end
+%     end
+% end
+
 %% Functions
 function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
     % tempA = m_sensors .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments);
