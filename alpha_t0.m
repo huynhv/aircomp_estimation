@@ -24,15 +24,19 @@ seed = 264;
 rng(seed);
 
 % number of sensors
-sensor_vals = [5];
+sensor_vals = [10,20];
 % number of deployments
-nDeployments = 50;
+nDeployments = 100;
 % number of trials
-nTrials = 1000;
+nTrials =  500;
 % number of measurements per sensor, starting from 0 then 100 sample means K = 101
 K = 101;
 
+%%% PLOT CONTROLS %%%
 show_plots = true;
+plot_individual = false;
+plot_avg = true;
+%%%
 
 % Window length in seconds
 T_obs = 5;
@@ -48,7 +52,7 @@ t = dt*(0:K-1)';
 
 % calculate the signal energy on the interior of the observation period
 func = @(t) abs(sensor_signal(t)).^2;
-sig_energy = integral(func,0,T_obs);
+P_s = integral(func,0,T_obs);
 
 % true parameter values
 alpha_true = 2;
@@ -64,10 +68,10 @@ max_tau = 1;
 t0_max = T_obs-T_s-max_tau;
 
 % define sensor snr
-sensor_db_values = 10;
+sensor_db_values = [0,10,20];
 
 % define channel snr
-channel_db_values = [10,20,30,40];
+channel_db_values = [10,20,30];
 
 % when we sample AWGN, have to divide simulated variance by dt because in
 % reality we are applying an anti-aliasing filter before sampling
@@ -82,7 +86,7 @@ all_g = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),
 rayleigh_factor = 1/sqrt(2);
 E_mag_g_sqr = 2*rayleigh_factor^2;
 
-all_schemes = ["NPC"];
+all_schemes = ["MLE","EMPC","EPC","PPC","NPC"];
 
 scheme_dict = dictionary(all_schemes,1:length(all_schemes));
 
@@ -93,6 +97,8 @@ save_alpha = [];
 
 % generate m and tau
 all_m = unifrnd(lower,upper,1,max(sensor_vals));
+E_mi_sqr = (1/12) * (upper-lower)^2 + 0.5*(lower+upper);
+
 all_tau = unifrnd(0,max_tau,1,max(sensor_vals));
 
 % initialize empty matrices for crlb, variance, mse, and bias
@@ -113,7 +119,7 @@ for sensor_db_idx = 1:length(sensor_db_values)
     disp('')
     disp("**Sensor SNR = " + (sensor_db_values(sensor_db_idx)) + " dB**")
     sensor_db = sensor_db_values(sensor_db_idx);    
-    var_w = sig_energy / db2magTen(sensor_db);
+    var_w = P_s / db2magTen(sensor_db);
     scaled_w = sqrt(var_w) * all_w;
 
     % iterate through sensor values
@@ -131,14 +137,12 @@ for sensor_db_idx = 1:length(sensor_db_values)
         [qg,qg_cq] = quantize_comp(g,M);
        
         s_i_true = m_sensors .* sensor_signal(t - tau_sensors - t0_true);
-        Ei = sum(abs(s_i_true).^2 .* dt,1);
-        xi = alpha_true * s_i_true + scaled_w(:,1:S,:,:);
+        E_i = sum(abs(s_i_true).^2 .* dt,1);
+        x_i = alpha_true * s_i_true + scaled_w(:,1:S,:,:);
 
         % iterate through channel snr values
         for channel_db_idx = 1:length(channel_db_values)
             disp("Channel SNR = " + (channel_db_values(channel_db_idx)) + " dB")
-            var_n = E_mag_g_sqr / db2magTen(channel_db_values(channel_db_idx));
-            scaled_n = sqrt(var_n/2) * n;
 
             for scheme_idx = 1:length(selected_schemes)
                 scheme = selected_schemes(scheme_idx);
@@ -146,20 +150,26 @@ for sensor_db_idx = 1:length(sensor_db_values)
 
                 if scheme == "MLE"
                     channel_gains = ones(size(g));
+                    var_n = 0;
                 elseif scheme == "EMPC"
                     channel_gains = ones(size(g));
                     Beta = 2 * pi^2 * sum(ones(size(g)) .* m_sensors.^2,2);
+                    var_n = P_s * E_mi_sqr / db2magTen(channel_db_values(channel_db_idx));
                 elseif scheme == "EPC"
                     channel_gains = abs(g);
                     Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2,2);
+                    var_n = P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(channel_db_idx));
                 elseif scheme == "PPC"
                     channel_gains = qg;
-                    Beta = 2 * pi^2 * sum(abs(qg).^2 .* m_sensors.^2);
+                    % Beta = 2 * pi^2 * sum(abs(qg).^2 .* m_sensors.^2);
+                    var_n = P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(channel_db_idx));
                 elseif scheme == "NPC"
                     channel_gains = g;
-                    Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2);
+                    % Beta = 2 * pi^2 * sum(abs(g).^2 .* m_sensors.^2);
+                    var_n = P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(channel_db_idx));
                 end
 
+                scaled_n = sqrt(var_n/2) * n;
                 %%%%%%%%%%%%%%%%% ESTIMATION %%%%%%%%%%%%%%%%%
 
                 % perform golden-section search over t0
@@ -177,17 +187,12 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     end
                     j = j + 1;
 
-                    if scheme == "MLE"
-                        channel_noise_1 = 0;
-                        channel_noise_2 = 0;
-                    else
-                        channel_noise_1 = scaled_n(j,1,:,:);
-                        channel_noise_2 = scaled_n(j,2,:,:);
-                    end
+                    channel_noise_1 = scaled_n(j,1,:,:);
+                    channel_noise_2 = scaled_n(j,2,:,:);
 
                     % there are two different time indices because the noise should be independent
-                    fx1 = calculate_y(x1,xi,m_sensors,t-tau_sensors,channel_noise_1,dt,channel_gains);
-                    fx2 = calculate_y(x2,xi,m_sensors,t-tau_sensors,channel_noise_2,dt,channel_gains);
+                    fx1 = calculate_y(x1,x_i,m_sensors,t-tau_sensors,channel_noise_1,dt,channel_gains);
+                    fx2 = calculate_y(x2,x_i,m_sensors,t-tau_sensors,channel_noise_2,dt,channel_gains);
 
                     % compare magnitudes to find swap indices
                     swap_lv = abs(fx1) > abs(fx2);
@@ -196,11 +201,11 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     left_val(swap_lv) = x2(swap_lv);
                     right_val(swap_rv) = x1(swap_rv);
                 end
-                % t0_estimates = (x1+x2)/2;
-                t0_estimates = t0_true*ones(size(x1));
+                t0_estimates = (x1+x2)/2;
+                % t0_estimates = t0_true*ones(size(x1));
                 
                 if scheme == "MLE"
-                    alpha_estimates = sum(channel_gains .* sum(xi .* m_sensors .* sensor_signal(t-tau_sensors-t0_estimates),1) * dt,2) ./ sum(Ei,2);
+                    alpha_estimates = sum(channel_gains .* sum(x_i .* m_sensors .* sensor_signal(t-tau_sensors-t0_estimates),1) * dt,2) ./ sum(E_i,2);
                 end
 
                 if scheme ~= "MLE"
@@ -211,9 +216,8 @@ for sensor_db_idx = 1:length(sensor_db_values)
                     omega = 2*pi*f;
 
                     % each time index y(t) requires its own matrix multiplication hence I added the singleton dimension
-                    y = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments) + pagetranspose(scaled_n(:,3,:,:));
-                    % v = reshape(matched_filter_integral(reshape(scaled_w(:,1:S,:,:),K,S,1,nTrials,nDeployments),m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments) + pagetranspose(scaled_n(:,3,:,:));
-    
+                    y = reshape(matched_filter_integral(reshape(x_i,K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments) + pagetranspose(scaled_n(:,3,:,:));
+
                     if (scheme == "NPC" || scheme == "PPC")
                         real_channel = real(channel_gains);
                         imag_channel = imag(channel_gains);
@@ -347,7 +351,7 @@ for sensor_db_idx = 1:length(sensor_db_values)
                 dst0 = reshape(squeeze(sum(channel_gains .* sum(alpha_true .* m_sensors.^2 .* temp .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
         
                 if scheme == "MLE"
-                    crlb(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = var_w / sum(Ei,2);
+                    crlb(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = var_w / sum(E_i,2);
                     temp = -w0*cos(w0*(t-tau_sensors-t0_true)).*(heaviside(t-tau_sensors-t0_true) - heaviside(t-tau_sensors-t0_true-T_s)) + ...
                     sin(w0*(t-tau_sensors-t0_true)).*-1.*(dirac(t-tau_sensors-t0_true) - dirac(t-tau_sensors-t0_true-T_s));
                     crlb(1,sensor_db_idx,channel_db_idx,2,scheme_idx,sensor_idx,:) = var_w / sum(sum((alpha_true .* m_sensors .* temp).^2 * dt,1),2);
@@ -358,13 +362,13 @@ for sensor_db_idx = 1:length(sensor_db_values)
                         dsdR_alpha = dt*(pagemtimes(pagetranspose(real(dsalpha)),hdR_matrix) - pagemtimes(pagetranspose(imag(dsalpha)),hdI_matrix));
                         dsdI_alpha = dt*(pagemtimes(pagetranspose(imag(dsalpha)),hdR_matrix) + pagemtimes(pagetranspose(real(dsalpha)),hdI_matrix));
 
-                        temp_alpha = dt*dt*(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)));
+                        % temp_alpha = dt*dt*(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)));
                         
                         %%% for t0
                         dsdR_t0 = dt*(pagemtimes(pagetranspose(real(dst0)),hdR_matrix) - pagemtimes(pagetranspose(imag(dst0)),hdI_matrix));
                         dsdI_t0 = dt*(pagemtimes(pagetranspose(imag(dst0)),hdR_matrix) + pagemtimes(pagetranspose(real(dst0)),hdI_matrix));
 
-                        temp_t0 = dt*dt*(pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)));
+                        % temp_t0 = dt*dt*(pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)));
                      
                         fisher_matrix = dt*dt*[(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)))...
                                     (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)));...
@@ -374,16 +378,12 @@ for sensor_db_idx = 1:length(sensor_db_values)
                         inv_zz = pageinv(fisher_matrix);
                         crlb(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = inv_zz(1,1,:);
                         crlb(1,sensor_db_idx,channel_db_idx,2,scheme_idx,sensor_idx,:) = inv_zz(2,2,:);
-                        % crlb(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = 1/temp_alpha;
-                        % crlb(1,sensor_db_idx,channel_db_idx,2,scheme_idx,sensor_idx,:) = 1/temp_t0;
                     else
                         fisher_matrix = dt*dt*[pagemtimes(pagemtimes(pagetranspose(dsalpha),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha);...
                             pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dst0)];
                         inv_zz = pageinv(fisher_matrix);
                         crlb(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = inv_zz(1,1,:);
                         crlb(1,sensor_db_idx,channel_db_idx,2,scheme_idx,sensor_idx,:) = inv_zz(2,2,:);
-                        % crlb(1,sensor_db_idx,channel_db_idx,1,scheme_idx,sensor_idx,:) = 1/(dt*dt*pagemtimes(pagemtimes(pagetranspose(dsalpha),Qn_matrix),dsalpha));
-                        % crlb(1,sensor_db_idx,channel_db_idx,2,scheme_idx,sensor_idx,:) = 1/(dt*dt*pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dst0));
                     end
                 end
             end
@@ -398,7 +398,7 @@ runtime = toc(loopTic);
 disp(floor(runtime/60) + " minutes " + mod(runtime,60) + " seconds")
 
 %% save results
-% save("results.mat")
+save("results.mat")
 
 %% average results over deployments
 avg_dep_var = mean(empirical_var,length(size(empirical_var)));
@@ -406,16 +406,17 @@ avg_dep_mse = mean(empirical_mse,length(size(empirical_mse)));
 avg_dep_crlb = mean(crlb,length(size(crlb)));
 
 %% avg linear plots
-params = ["\alpha","t_0"];
-color_vec = ["#A2142F","#0072BD","#7E2F8E"];
-if show_plots
-    for sensor_db_idx = 1:length(sensor_db_values)
-        for scheme_idx = 1:length(selected_schemes)
+if plot_avg
+    params = ["\alpha","t_0"];
+    color_vec = ["#A2142F","#0072BD","#7E2F8E"];
+    if show_plots
+        for sensor_db_idx = 1:length(sensor_db_values)
             fig1 = figure;
             set(fig1,'WindowState', 'maximized');
             % set(fig1,'Position',[100,100,1600,400])
-            tiledlayout(1,2);
-            for ii  = 1
+            tiledlayout(2,4);
+            % don't plot the MLE, use it as baseline curve
+            for scheme_idx = find(~strcmp(selected_schemes,"MLE")) 
                 % for alpha and t0
                 for jj = 1:2
                     all_vals = [];
@@ -427,74 +428,74 @@ if show_plots
                     plot(nan,nan,'^','color','black');
                     plot(nan,nan,'x','color','black');
                     plot(nan,nan,'o','color','black');
-
+    
                     for sensor_idx = 1:length(sensor_vals)
-                        plot(channel_db_values,squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
-                        plot(channel_db_values,squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
-                        plot(channel_db_values,squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
-                        all_vals = [all_vals; squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
-                        squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
-                        squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii))];
+                        plot(channel_db_values,squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1)),'--^','color',color_vec(sensor_idx))
+                        plot(channel_db_values,squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1)),'--x','color',color_vec(sensor_idx))
+                        plot(channel_db_values,squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1)),'--o','color',color_vec(sensor_idx))
+                        all_vals = [all_vals; squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1));...
+                        squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1));...
+                        squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1))];
                     end
-
+    
                     xlabel('Channel SNR (dB)','Interpreter','latex')
                     ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
                     legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
-                    ylim([0,1.1*(max(all_vals))])
-                    title(params(jj) + " Estimation")
+                    ylim([-.01,1.1*(max(all_vals))])
+                    title(params(jj) + " Estimation, " + selected_schemes(scheme_idx))
                 end
+                sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
             end
-            sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
         end
     end
 end
 %% individual linear plots
+if plot_individual
+    params = ["\alpha","t_0"];
+    color_vec = ["#A2142F","#0072BD","#7E2F8E"];
+    if show_plots
+        deployments_highlighted = min(6,nDeployments);
 
-% params = ["\alpha","t_0"];
-% color_vec = ["#A2142F","#0072BD","#7E2F8E"];
-% if show_plots
-%     deployments_highlighted = min(6,nDeployments);
-% 
-%     for sensor_db_idx = 1:length(sensor_db_values)
-%         for scheme_idx = 1:length(selected_schemes)
-%             fig1 = figure;
-%             set(fig1,'WindowState', 'maximized');
-%             % set(fig1,'Position',[100,100,1600,400])
-%             tiledlayout(3,4);
-%             for ii  = 1:deployments_highlighted
-%                 % for alpha and t0
-%                 for jj = 1:2
-%                     all_vals = [];
-%                     nexttile
-%                     hold on
-%                     for sensor_idx = 1:length(sensor_vals)
-%                         plot(nan,nan,'color',color_vec(sensor_idx));
-%                     end
-%                     plot(nan,nan,'^','color','black');
-%                     plot(nan,nan,'x','color','black');
-%                     plot(nan,nan,'o','color','black');
-% 
-%                     for sensor_idx = 1:length(sensor_vals)
-%                         plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
-%                         plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
-%                         plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
-%                         all_vals = [all_vals; squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
-%                         squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
-%                         squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii))];
-%                     end
-% 
-%                     xlabel('Channel SNR (dB)','Interpreter','latex')
-%                     ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
-%                     legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
-%                     ylim([0,1.1*(max(all_vals))])
-%                     title(params(jj) + " Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
-%                 end
-%             end
-%             sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
-%         end
-%     end
-% end
+        for sensor_db_idx = 1:length(sensor_db_values)
+            for scheme_idx = 1:length(selected_schemes)
+                fig1 = figure;
+                set(fig1,'WindowState', 'maximized');
+                % set(fig1,'Position',[100,100,1600,400])
+                tiledlayout(3,4);
+                for ii  = 1:deployments_highlighted
+                    % for alpha and t0
+                    for jj = 1:2
+                        all_vals = [];
+                        nexttile
+                        hold on
+                        for sensor_idx = 1:length(sensor_vals)
+                            plot(nan,nan,'color',color_vec(sensor_idx));
+                        end
+                        plot(nan,nan,'^','color','black');
+                        plot(nan,nan,'x','color','black');
+                        plot(nan,nan,'o','color','black');
 
+                        for sensor_idx = 1:length(sensor_vals)
+                            plot(channel_db_values,squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--^','color',color_vec(sensor_idx))
+                            plot(channel_db_values,squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--x','color',color_vec(sensor_idx))
+                            plot(channel_db_values,squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii)),'--o','color',color_vec(sensor_idx))
+                            all_vals = [all_vals; squeeze(empirical_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
+                            squeeze(empirical_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii));...
+                            squeeze(crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,ii))];
+                        end
+
+                        xlabel('Channel SNR (dB)','Interpreter','latex')
+                        ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
+                        legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
+                        ylim([0,1.1*(max(all_vals))])
+                        title(params(jj) + " Estimation, " + selected_schemes(scheme_idx) + ", Dep = " + ii)
+                    end
+                end
+                sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
+            end
+        end
+    end
+end
 %% Functions
 function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
     % tempA = m_sensors .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments);
