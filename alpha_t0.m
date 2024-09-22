@@ -24,7 +24,7 @@ seed = 264;
 rng(seed);
 
 % number of sensors
-sensor_vals = [10,20];
+sensor_vals = [5,10];
 % number of deployments
 nDeployments = 100;
 % number of trials
@@ -68,7 +68,7 @@ max_tau = 1;
 t0_max = T_obs-T_s-max_tau;
 
 % define sensor snr
-sensor_db_values = [0,10,20];
+sensor_db_values = [10,20];
 
 % define channel snr
 channel_db_values = [10,20,30];
@@ -86,9 +86,7 @@ all_g = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),
 rayleigh_factor = 1/sqrt(2);
 E_mag_g_sqr = 2*rayleigh_factor^2;
 
-all_schemes = ["MLE","EMPC","EPC","PPC","NPC"];
-
-scheme_dict = dictionary(all_schemes,1:length(all_schemes));
+all_schemes = ["NPC"];
 
 selected_schemes = all_schemes;
 
@@ -398,7 +396,7 @@ runtime = toc(loopTic);
 disp(floor(runtime/60) + " minutes " + mod(runtime,60) + " seconds")
 
 %% save results
-save("results.mat")
+% save("results.mat")
 
 %% average results over deployments
 avg_dep_var = mean(empirical_var,length(size(empirical_var)));
@@ -430,18 +428,33 @@ if plot_avg
                     plot(nan,nan,'o','color','black');
     
                     for sensor_idx = 1:length(sensor_vals)
-                        plot(channel_db_values,squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1)),'--^','color',color_vec(sensor_idx))
-                        plot(channel_db_values,squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1)),'--x','color',color_vec(sensor_idx))
-                        plot(channel_db_values,squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1)),'--o','color',color_vec(sensor_idx))
+                        plot(channel_db_values,log10(squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1))),'--^','color',color_vec(sensor_idx))
+                        plot(channel_db_values,log10(squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1))),'--x','color',color_vec(sensor_idx))
+                        plot(channel_db_values,log10(squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1))),'--o','color',color_vec(sensor_idx))
                         all_vals = [all_vals; squeeze(avg_dep_var(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1));...
                         squeeze(avg_dep_mse(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1));...
                         squeeze(avg_dep_crlb(:,sensor_db_idx,:,jj,scheme_idx,sensor_idx,1))];
                     end
+                    all_vals = log10(all_vals);
     
                     xlabel('Channel SNR (dB)','Interpreter','latex')
-                    ylabel('$$\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\}$$','Interpreter','latex')
+                    ylabel('$$\log_{10}(\mathrm{E}\{(\hat{'+params(jj)+'}-'+params(jj)+')^2\})$$','Interpreter','latex')
                     legend(["S = " + sensor_vals,"VAR","MSE","CRLB"])
-                    ylim([-.01,1.1*(max(all_vals))])
+                    % ylim([-.01,1.1*(max(all_vals))])
+                    
+                    if min(all_vals) < 0
+                        min_scaler = 1.2;
+                    else
+                        min_scaler = 0.8;
+                    end
+
+                    if max(all_vals) < 0
+                        max_scaler = 0.8;
+                    else
+                        max_scaler = 1.2;
+                    end
+
+                    ylim([min_scaler*min(all_vals),max_scaler*max(all_vals)])
                     title(params(jj) + " Estimation, " + selected_schemes(scheme_idx))
                 end
                 sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + sensor_db_values(sensor_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower + "," + upper +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
@@ -505,6 +518,8 @@ function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTri
     diag_idx = sub2ind(size(tempC),1:S,1:S);
     KTD = K*nTrials*nDeployments;
     all_diag_idx = diag_idx + S^2 *reshape(0:(KTD-1),1,1,K,nTrials,nDeployments);
+
+    tempD = zeros(1, S, K, nTrials, nDeployments);
 
     tempD = tempC(all_diag_idx)*dt;
     out = pagemtimes(tempD,reshape(channel_gains,S,1,1,1,nDeployments));
