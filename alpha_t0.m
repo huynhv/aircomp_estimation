@@ -23,8 +23,28 @@ close all
 seed = 264;
 rng(seed);
 
+%%% EXPERIMENT CONTROLS %%%
+% Paper 1
+% joint, disjoint, agent_server_noise,  dropout_participation, random_dropout
+% Paper 2
+% linear_attack
+experiment = "linear_attack";
+%%%
+
 % number of sensors
 sensor_vals = [1,5,10];
+
+% define sensor snr
+agent_db_values = [10,20];
+
+if experiment == "random_dropout"
+    dropout_vals = [0,2,4];
+    sensor_dimension = length(dropout_vals);
+else
+    dropout_vals = 0;
+    sensor_dimension = length(sensor_vals);
+end
+
 % number of deployments
 nDeployments = 100;
 % number of trials
@@ -32,10 +52,6 @@ nTrials =  500;
 % number of measurements per sensor, starting from 0 then 100 sample means K = 101
 K = 101;
 
-%%% EXPERIMENT CONTROLS %%%
-% joint, disjoint, agent_server_noise,  dropout_participation, random_dropout
-experiment = "random_dropout";
-%%%
 
 % Window length in seconds
 T_obs = 5;
@@ -94,23 +110,12 @@ E_mi_sqr = (1/12) * (upper_m-lower_m)^2 + 0.5*(lower_m+upper_m);
 
 all_tau = unifrnd(0,max_tau,1,max(sensor_vals));
 
-% define sensor snr
-agent_db_values = [10,20];
-
 % define channel snr
 channel_db_values = repmat([10,15,20,25,30], length(selected_schemes), 1, length(agent_db_values));
 
-if experiment == "random_dropout"
-    dropout_vals = [0,2,4];
-    agent_dimension = length(dropout_vals);
-else
-    dropout_vals = 0;
-    agent_dimension = length(sensor_vals);
-end
-
 % initialize empty matrices for crlb, variance, mse, and bias
 % alpha is index 1, t0 is index 2
-crlb = zeros(1,length(agent_db_values),size(channel_db_values,2),2,length(selected_schemes),agent_dimension,nDeployments);
+crlb = zeros(1,length(agent_db_values),size(channel_db_values,2),2,length(selected_schemes),sensor_dimension,nDeployments);
 empirical_var = crlb;
 empirical_mse = crlb;
 bias = crlb;
@@ -120,6 +125,7 @@ GR = round((sqrt(5)+1)/2,3);
 
 % start run timer
 loopTic = tic;
+
 
 % iterate through sensor snr values
 for agent_db_idx = 1:length(agent_db_values)
@@ -156,7 +162,7 @@ for agent_db_idx = 1:length(agent_db_values)
         end
 
         if experiment == "random_dropout"
-            seed = 0;
+            seed = 22;
             rng(seed);
             which_dropout = zeros(nDeployments,max(dropout_vals));
             for idx = 1:nDeployments
@@ -188,9 +194,13 @@ for agent_db_idx = 1:length(agent_db_values)
                     disp(scheme + ", Channel SNR = " + (channel_db_values(scheme_idx,channel_db_idx,agent_db_idx)) + " dB")
     
                     if scheme == "MLE"
-                        channel_gains = ones(size(g));
-                        E_i = repmat(sum(abs(s_i_true).^2 .* dt,1),1,1,1,nDeployments); % 1 x S
-                        var_n = 0;
+                        if channel_db_idx > 1
+                            continue
+                        else
+                            channel_gains = ones(size(g));
+                            E_i = repmat(sum(abs(s_i_true).^2 .* dt,1),1,1,1,nDeployments); % 1 x S
+                            var_n = 0;
+                        end
                     elseif scheme == "EMPC"
                         channel_gains = ones(size(g));
                         var_n = P_s * E_mi_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
@@ -455,19 +465,19 @@ runtime = toc(loopTic);
 disp(floor(runtime/60) + " minutes " + mod(runtime,60) + " seconds")
 
 %% save results
-% if experiment == "joint"
-%     save("change_snr_results.mat")
-% elseif experiment == "disjoint"
-%     save("disjoint_results.mat")
-% elseif experiment == "agent_server_noise"
-%     save("agent_server_ratio.mat")
-% elseif experiment == "random_dropout"
-%     save("random_dropout.mat")
-% elseif experiment == "dropout_participation"
-%     save("dropout_participation.mat")
-% else
-%     disp("Unknown experiment specified. Results not saved!")
-% end
+if experiment == "joint"
+    save("joint_results.mat")
+elseif experiment == "disjoint"
+    save("disjoint_results.mat")
+elseif experiment == "agent_server_noise"
+    save("agent_server_ratio.mat")
+elseif experiment == "random_dropout"
+    save("random_dropout.mat")
+elseif experiment == "dropout_participation"
+    save("dropout_participation.mat")
+else
+    disp("Unknown experiment specified. Results not saved!")
+end
 
 %% avg linear plots
 avg_dep_var = mean(empirical_var,length(size(empirical_var)));
@@ -550,7 +560,7 @@ for agent_db_idx = 1:length(agent_db_values)
 
             title(params(jj) + " Estimation, " + selected_schemes(scheme_idx))
         end
-        sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + agent_db_values(agent_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower_m + "," + upper_m +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
+        % sgtitle(fig1,"$$\mathrm{Deployments} = " + nDeployments + ",\, \mathrm{Trials} = " + nTrials + ",\, S = " + S + ",\, K = " + K + ",\,$$ Sensor SNR $$ = " + agent_db_values(agent_db_idx) + "\ \mathrm{dB},\, \alpha =" + alpha_true + ",\, t_0 = " + t0_true + ",\, m_i \sim U[" + lower_m + "," + upper_m +"],\, \tau_i \sim U[" + 0 + "," + max_tau +"]$$","interpreter","latex")
     end
 end
 %% Functions
