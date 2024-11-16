@@ -26,16 +26,14 @@ rng(seed);
 %%% EXPERIMENT CONTROLS %%%
 % Paper 1
 % joint, disjoint, agent_server_noise,  dropout_participation, random_dropout
-% Paper 2
-% linear_attack
-experiment = "linear_attack";
+experiment = "joint";
 %%%
 
 % number of sensors
 sensor_vals = [1,5,10];
 
 % define sensor snr
-agent_db_values = [10,20];
+agent_db_values = [20];
 
 if experiment == "random_dropout"
     dropout_vals = [0,2,4];
@@ -51,7 +49,6 @@ nDeployments = 100;
 nTrials =  500;
 % number of measurements per sensor, starting from 0 then 100 sample means K = 101
 K = 101;
-
 
 % Window length in seconds
 T_obs = 5;
@@ -97,7 +94,7 @@ all_g = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),
 rayleigh_factor = 1/sqrt(2);
 E_mag_g_sqr = 2*rayleigh_factor^2;
 
-all_schemes = ["MLE","EMPC","EPC","PPC","NPC"];
+all_schemes = ["EPC","PPC","NPC"];
 
 selected_schemes = all_schemes;
 
@@ -106,7 +103,8 @@ save_alpha = [];
 
 % generate m and tau
 all_m = unifrnd(lower_m,upper_m,1,max(sensor_vals));
-E_mi_sqr = (1/12) * (upper_m-lower_m)^2 + 0.5*(lower_m+upper_m);
+% E_mi_sqr = (1/12) * (upper_m-lower_m)^2 + 0.5*(lower_m+upper_m);
+E_mi_sqr = mean(all_m.^2);
 
 all_tau = unifrnd(0,max_tau,1,max(sensor_vals));
 
@@ -120,12 +118,8 @@ empirical_var = crlb;
 empirical_mse = crlb;
 bias = crlb;
 
-% define the Golden Ratio for the search algorithm
-GR = round((sqrt(5)+1)/2,3);
-
 % start run timer
 loopTic = tic;
-
 
 % iterate through sensor snr values
 for agent_db_idx = 1:length(agent_db_values)
@@ -168,8 +162,6 @@ for agent_db_idx = 1:length(agent_db_values)
             for idx = 1:nDeployments
                 which_dropout(idx,:) = randperm(max(sensor_vals),max(dropout_vals));
             end
-            % which_dropout = max(sensor_vals) - (0:max(dropout_vals)-1);
-            % which_dropout = repmat(which_dropout,nDeployments,1);
         end
         
         for dropout_idx = 1:length(dropout_vals)
@@ -184,7 +176,7 @@ for agent_db_idx = 1:length(agent_db_values)
            
             s_i_true = m_sensors .* sensor_signal(t - tau_sensors - t0_true); % K x S
             x_i = alpha_true * s_i_true + scaled_w(:,1:S,:,:); % K x S x nTrials x nDeployments
-    
+
             % iterate through channel snr values
             for channel_db_idx = 1:length(channel_db_values)
                 for scheme_idx = 1:length(selected_schemes)
@@ -228,35 +220,46 @@ for agent_db_idx = 1:length(agent_db_values)
                     %%%%%%%%%%%%%%%%% ESTIMATION %%%%%%%%%%%%%%%%%
     
                     % perform golden-section search over t0
-                    left_val = zeros(1,1,nTrials,nDeployments);
-                    right_val = t0_max*ones(1,1,nTrials,nDeployments);
-                    j = 0;
-    
-                    while (true) 
-                        d = (right_val-left_val)/GR;
-                        x1 = left_val + d;
-                        x2 = right_val - d;
-    
-                        if (sum(sum(abs(x1-x2) < 1E-3)) == nTrials*nDeployments)
-                            break;
-                        end
-                        j = j + 1;
-    
-                        channel_noise_1 = scaled_n(j,1,:,:);
-                        channel_noise_2 = scaled_n(j,2,:,:);
-    
-                        % there are two different time indices because the noise should be independent
-                        fx1 = calculate_y(x1,x_i,m_sensors,t-tau_sensors,channel_noise_1,dt,channel_gains);
-                        fx2 = calculate_y(x2,x_i,m_sensors,t-tau_sensors,channel_noise_2,dt,channel_gains);
-    
-                        % compare magnitudes to find swap indices
-                        swap_lv = abs(fx1) > abs(fx2);
-                        swap_rv = ~swap_lv;
-    
-                        left_val(swap_lv) = x2(swap_lv);
-                        right_val(swap_rv) = x1(swap_rv);
-                    end
-                    t0_estimates_for_plot = (x1+x2)/2;
+                    % left_val = zeros(1,1,nTrials,nDeployments);
+                    % right_val = t0_max*ones(1,1,nTrials,nDeployments);
+                    % j = 0;
+                    % 
+                    % while (true) 
+                    %     d = (right_val-left_val)/GR;
+                    %     x1 = left_val + d;
+                    %     x2 = right_val - d;
+                    % 
+                    %     if (sum(sum(abs(x1-x2) < 1E-3)) == nTrials*nDeployments)
+                    %         break;
+                    %     end
+                    %     j = j + 1;
+                    % 
+                    %     channel_noise_1 = scaled_n(j,1,:,:);
+                    %     channel_noise_2 = scaled_n(j,2,:,:);
+                    % 
+                    %     % there are two different time indices because the noise should be independent
+                    %     fx1 = calculate_y(x1,x_i,m_sensors,t-tau_sensors,channel_noise_1,dt,channel_gains);
+                    %     fx2 = calculate_y(x2,x_i,m_sensors,t-tau_sensors,channel_noise_2,dt,channel_gains);
+                    % 
+                    %     % compare magnitudes to find swap indices
+                    %     swap_lv = abs(fx1) > abs(fx2);
+                    %     swap_rv = ~swap_lv;
+                    % 
+                    %     left_val(swap_lv) = x2(swap_lv);
+                    %     right_val(swap_rv) = x1(swap_rv);
+                    % end
+                    % t0_estimates_for_plot = (x1+x2)/2;
+
+                    % each time index y(t) requires its own matrix
+                    % multiplication hence I added the singleton dimension
+                    cws = reshape(matched_filter_integral(reshape(x_i,K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                    y =  cws + pagetranspose(scaled_n(:,1,:,:));
+
+                    % we know a priori that the estimate of t0 cannot
+                    % exceed t0_max
+                    [~,I] = max(abs(y(:,1:(t0_max/dt + 1),:,:)));
+                    t0_estimates_for_plot = (I-1)*dt;
+                    disp("")
                     
                     if experiment == "disjoint"
                         t0_estimates = t0_true*ones(size(x1));
@@ -270,15 +273,14 @@ for agent_db_idx = 1:length(agent_db_values)
                     end
     
                     if scheme ~= "MLE"
+
                         fs = 1/dt;
                         L = K-1;
                         f = 0:fs/(2*L):fs/2;
                         indet_idx = find(abs(round(f,4)) == 0.5);
                         omega = 2*pi*f;
     
-                        % each time index y(t) requires its own matrix multiplication hence I added the singleton dimension
-                        y = reshape(matched_filter_integral(reshape(x_i,K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments) + pagetranspose(scaled_n(:,3,:,:));
-    
+
                         if (scheme == "NPC" || scheme == "PPC")
                             real_channel = real(channel_gains);
                             imag_channel = imag(channel_gains);
@@ -333,11 +335,8 @@ for agent_db_idx = 1:length(agent_db_values)
                             %%% for alpha
                             % I didn't know what to name this but it's sum gi int si(tau - t0_estimates) si(tau-t) dtau
                             % SINCE EACH ESTIMATED t0 is DIFFERENT, then WE HAVE DIFFERENT VALUES ACROSS TRIALS
-                            % aaa = reshape(sum(reshape(channel_gains,1,S,1,1,nDeployments) .* sum(m_sensors.^2 .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments) .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))),1)*dt,2),1,K,nTrials,nDeployments);
                             aaa = reshape(matched_filter_integral(m_sensors .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments), m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t))), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
     
-                            % aaaR = reshape(real(aaa),1,length(t),nTrials,nDeployments);
-                            % aaaI = reshape(imag(aaa),1,length(t),nTrials,nDeployments);
                             aaaR = real(aaa);
                             aaaI = imag(aaa);
     
@@ -387,12 +386,6 @@ for agent_db_idx = 1:length(agent_db_values)
                         end
                         % we determine the magnitude of alpha
                         alpha_estimates = num ./ denom;
-                        % alpha_estimates(alpha_estimates < 0) = 0;
-                        
-                        % if S == 10
-                        %     save_t0 = cat(4,save_t0,t0_estimates(:,:,:,5));
-                        %     save_alpha = cat(4,save_alpha,alpha_estimates(:,:,:,5));
-                        % end
                     end
 
                     if experiment == "random_dropout"
@@ -408,6 +401,9 @@ for agent_db_idx = 1:length(agent_db_values)
                     empirical_mse(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = mean((t0_estimates_for_plot - t0_true).^2,3);
     
                     bias(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = mean(alpha_estimates,3);
+                    if any(isnan(mean(alpha_estimates,3)))
+                        disp("")
+                    end
                     bias(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = mean(t0_estimates_for_plot,3);
     
                     %%%%%%%%%%%%%%%%% CRLB %%%%%%%%%%%%%%%%%
@@ -465,19 +461,19 @@ runtime = toc(loopTic);
 disp(floor(runtime/60) + " minutes " + mod(runtime,60) + " seconds")
 
 %% save results
-if experiment == "joint"
-    save("joint_results.mat")
-elseif experiment == "disjoint"
-    save("disjoint_results.mat")
-elseif experiment == "agent_server_noise"
-    save("agent_server_ratio.mat")
-elseif experiment == "random_dropout"
-    save("random_dropout.mat")
-elseif experiment == "dropout_participation"
-    save("dropout_participation.mat")
-else
-    disp("Unknown experiment specified. Results not saved!")
-end
+% if experiment == "joint"
+%     save("joint_results.mat")
+% elseif experiment == "disjoint"
+%     save("disjoint_results.mat")
+% elseif experiment == "agent_server_noise"
+%     save("agent_server_ratio.mat")
+% elseif experiment == "random_dropout"
+%     save("random_dropout.mat")
+% elseif experiment == "dropout_participation"
+%     save("dropout_participation.mat")
+% else
+%     disp("Unknown experiment specified. Results not saved!")
+% end
 
 %% avg linear plots
 avg_dep_var = mean(empirical_var,length(size(empirical_var)));
@@ -564,20 +560,7 @@ for agent_db_idx = 1:length(agent_db_values)
     end
 end
 %% Functions
-function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
-    % tempA = m_sensors .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments);
-    % tempB = m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t)));
-    tempC = pagemtimes(pagetranspose(tempA),tempB);
 
-    diag_idx = sub2ind(size(tempC),1:S,1:S);
-    KTD = K*nTrials*nDeployments;
-    all_diag_idx = diag_idx + S^2 *reshape(0:(KTD-1),1,1,K,nTrials,nDeployments);
-
-    tempD = zeros(1, S, K, nTrials, nDeployments);
-
-    tempD = tempC(all_diag_idx)*dt;
-    out = pagemtimes(tempD,reshape(channel_gains,S,1,1,1,nDeployments));
-end
 
 % given the single-sided FFT, get the ifft and corresponding time-shifted
 % matrix
@@ -590,6 +573,21 @@ function [Qn,Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments)
     for i = 1:(L+1)
         Qn_matrix(i,:,:) = mirrored_Qn(1,L+1-(i-1):end-(i-1),:);
     end
+end
+
+function u = calculate_u(t,xi_tau,m_sensors,tau,dtau)
+    S = length(m_sensors);
+    nTrials = size(xi_tau,3);
+    nDeployments = size(xi_tau,4);
+
+    % y = sum(channel_gains .* sum(xi_tau .* m_sensors .* sensor_signal(tau-t),1)*dtau,2) + n;
+    tempC = pagemtimes(pagetranspose(xi_tau),m_sensors .* sensor_signal(tau-t));
+    diag_idx = sub2ind(size(tempC),1:S,1:S);
+    KTD = size(xi_tau,3)*size(xi_tau,4);
+    all_diag_idx = diag_idx + S^2 *reshape(0:(KTD-1),1,1,nTrials,nDeployments);
+
+    aa = tempC(all_diag_idx)*dtau;
+    disp('')
 end
 
 function y = calculate_y(t,xi_tau,m_sensors,tau,n,dtau,channel_gains)
@@ -606,6 +604,19 @@ function y = calculate_y(t,xi_tau,m_sensors,tau,n,dtau,channel_gains)
     aa = tempC(all_diag_idx)*dtau;
     y = pagemtimes(aa,pagetranspose(channel_gains)) + n;
     disp('')
+end
+
+function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
+    % tempA = m_sensors .* reshape(sensor_signal(t-tau_sensors-t0_estimates),K,S,1,nTrials,nDeployments);
+    % tempB = m_sensors .* sensor_signal(t-tau_sensors-reshape(t,1,1,length(t)));
+    tempC = pagemtimes(pagetranspose(tempA),tempB);
+
+    diag_idx = sub2ind(size(tempC),1:S,1:S);
+    KTD = K*nTrials*nDeployments;
+    all_diag_idx = diag_idx + S^2 *reshape(0:(KTD-1),1,1,K,nTrials,nDeployments);
+
+    tempD = tempC(all_diag_idx)*dt;
+    out = pagemtimes(tempD,reshape(channel_gains,S,1,1,1,nDeployments));
 end
 
 function [qg,cq] = quantize_comp(g,M)
