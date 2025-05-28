@@ -13,7 +13,7 @@ rng(seed);
 
 %%% EXPERIMENT CONTROLS %%%
 % naive_joint, naive_disjoint, joint, disjoint, agent_server_noise, random_dropout
-experiment = "disjoint";
+experiment = "joint";
 %%%
 
 % number of sensors
