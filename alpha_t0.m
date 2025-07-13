@@ -6,15 +6,23 @@ close all
 seed = 264;
 rng(seed);
 
-% Choose which experiment to run. Naive refers to AC-NAE while the remainder of
-% the experiments refer to AC-CWE.
+% Choose which experiment to run.
+% naive uses NAE, all other experiment options use CWE.
 experiment_list = ["naive_disjoint", "naive_joint", "disjoint", "joint", "joint_grid", "random_dropout"];
 experiment = "joint_grid";
 
+% Set number of deployments.
+nDeployments = 100;
+% Set number of trials.
+nTrials = 500;
+% Set the number of measurements per sensor. The sample index starts at 0 so
+% sampling from index 0 to 100 requires K = 101 measurements.
+K = 101;
+
 % Set some bookkeeping variables depending on which experiment we are running.
 if experiment == "random_dropout"
-    save_dim = dropout_idx;
     dropout_vals = [0,2,4];
+    agent_db_values = [0];
     sensor_dimension = length(dropout_vals);
     % only consider maximum number of sensors and drop from there
     sensor_vals = [10];
@@ -24,29 +32,19 @@ if experiment == "random_dropout"
         which_dropout(idx,:) = randperm(max(sensor_vals),max(dropout_vals));
     end
 else
-    save_dim = sensor_idx;
+    if experiment == "joint_grid"
+        sensor_vals = [5];
+        agent_db_values = [0,5,10,15,20];
+    else
+        sensor_vals = [5,10];
+        agent_db_values = [0];
+    end
     dropout_vals = 0;
     sensor_dimension = length(sensor_vals);
 end
 
-if experiment == "joint_grid"
-    sensor_vals = [5];
-    agent_db_values = [0,5,10,15,20];
-else
-    sensor_vals = [5,10];
-    agent_db_values = [0];
-end
-
 % Parse experiment name for organization.
 exp_split = strsplit(experiment,'_');
-
-% Set number of deployments.
-nDeployments = 100;
-% Set number of trials.
-nTrials = 500;
-% Set the number of measurements per sensor. The sample index starts at 0 so
-% sampling from index 0 to 100 requires K = 101 measurements.
-K = 101;
 
 % Set observation window length in seconds.
 T_obs = 5;
@@ -168,7 +166,8 @@ for agent_db_idx = 1:length(agent_db_values)
                     disp("** Agent SNR = " + (agent_db_values(agent_db_idx)) + " dB**")
                     disp("** Channel SNR = " + (channel_db_values(scheme_idx,channel_db_idx,agent_db_idx)) + " dB**")
                     disp("** S = " + S + ", Dropout = " + dropout_vals(dropout_idx) + " **")
-    
+
+
                     % Define channel gains and server noise power.
                     if scheme == "MPC"
                         channel_gains = ones(size(gi));
@@ -407,6 +406,12 @@ for agent_db_idx = 1:length(agent_db_values)
                         alpha_estimates = num ./ denom;
                     end
 
+                    if experiment == "random_dropout"
+                        save_dim = dropout_idx;
+                    else
+                        save_dim = sensor_idx;
+                    end
+
                     % Compute empirical variance.
                     empirical_var(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = var(alpha_estimates,0,3);
                     empirical_var(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = var(t0_estimates_for_plot,0,3);
@@ -502,7 +507,7 @@ else
     avg_dep_my_var = mean(my_var,length(size(crlb)));
 end
 
-%% Save exeperiment results.
+%% Save experiment results.
 if ~any(experiment == experiment_list)
     error("Unknown experiment specified. Results not saved!")
 else
@@ -517,7 +522,6 @@ params_text = ["alpha","t0"];
 color_vec = ["#A2142F", "#0072BD", "#333333"];
 
 folder_path = "C:\Users\Vincent Huynh\Desktop\Final AirComp Results\";
-desktop_path = "C:\Users\Vincent Huynh\Desktop";
 
 %% Linear plots
 if experiment ~= "joint_grid"
@@ -537,17 +541,17 @@ if experiment ~= "joint_grid"
                 scheme = selected_schemes(scheme_idx);
                 fig1 = figure;
                 set(fig1,'Position',[100,100,450,450])
-    
+                ax = gca;
                 hold on
-    
+                
                 % Plot pseudoplots for legend symbols.
                 if experiment == "random_dropout"
                     for dropout_idx = 1:length(dropout_vals)
-                        plot(nan,nan,'color',color_vec(dropout_idx));
+                        plot(nan,nan,'color',color_vec(dropout_idx),'LineWidth',2);
                     end
                 else
                     for sensor_idx = 1:length(sensor_vals) 
-                        plot(nan,nan,'color',color_vec(sensor_idx));
+                        plot(nan,nan,'color',color_vec(sensor_idx),'LineWidth',2);
                     end
                 end
                 plot(nan,nan,'^','color','black');
@@ -571,20 +575,15 @@ if experiment ~= "joint_grid"
                     plot(x_axis_series,(squeeze(avg_dep_mse(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-x','color',color_vec(count_idx),'LineWidth', 1)
                     plot(x_axis_series,(squeeze(avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx),'LineWidth', 1)
                 end
-    
-                if experiment == "agent_server_noise"
-                    xlabel('$$\Gamma$$','Interpreter','latex')
-                else
-                    xlabel('Channel SNR (dB)')
-                end
+
+                xlabel('Channel SNR (dB)')
                 ylabel(" ")
     
                 title('$$\hat{'+params_latex(param_idx)+'}$$','Interpreter','latex')
-                set(gca, 'FontSize', 15);
-                set(gca, 'YScale', 'log')
-    
-                ylim([10^(-0.25)*min(all_vals,[],"all"),1.05*max(all_vals,[],"all")]);
-    
+                
+                set(ax, 'FontSize', 15);
+                set(ax, 'YScale', 'log')
+
                 if scheme == "MPC"
                     if experiment == "random_dropout"
                         legend(["Drop = " + dropout_vals,"VAR","MSE","CRLB"], 'Location', 'best')
@@ -592,13 +591,33 @@ if experiment ~= "joint_grid"
                         legend(["S = " + sensor_vals,"VAR","MSE","CRLB"], 'Location', 'best')
                     end
                 end
+                
+                % Add box around plot axes.
+                box(ax, 'on');
+                grid on
+
+                y_lower = 10^(-0.25)*min(all_vals,[],"all");
+                y_upper = 1.05*max(all_vals,[],"all");
+                ylim([y_lower,y_upper]);
+                y_ticks = power_10_range(y_lower,y_upper);
+
+                % Don't plot for certain combinations due to axis and box
+                % overlap
+                if param_idx == 1
+                        y_ticks = y_ticks(2:end);
+                end
     
+                ax.YTick = y_ticks;
+                ax.GridColor = [0 0 0];
+                ax.GridAlpha = 0.5;
+                ax.LineWidth = 1;
+
                 % Save the figure.
                 exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
             end
         end
     end
-%%  surface plots
+%%  Surface plots
 else
     % Create save directory if it does not exist.
     save_folder = folder_path + experiment + "_" + string(agent_db_values(end)) + "_db";
@@ -614,6 +633,7 @@ else
         for scheme_idx = 1:length(selected_schemes)
             fig1 = figure;
             set(fig1,'Position',[100,100,600,450])
+            ax = gca;
 
             count_vals = sensor_vals;
 
@@ -622,27 +642,30 @@ else
             end
 
             colorbar
+            % Change view angle to better see both x and y dimensions
             view(150,20)
             xlabel('Channel SNR (dB)')
             ylabel('Sensor SNR (dB)')
             zlabel('$$ \mathrm{Var} ( \hat{'+params_latex(param_idx)+'} )$$','Interpreter','latex')
-            
+           
+            title('$$\hat{' + params_latex(param_idx) + '}$$', 'Interpreter','latex')
+            set(ax, 'FontSize', 12);
+            set(ax, 'ZScale', 'log')
+
+            % Add box around plot axes.
+            box(ax, 'on');
+            grid on
+
             z_lower = 10^(-0.25)*min(all_vals,[],"all");
             z_upper = 1.05*max(all_vals,[],"all");
             zlim([z_lower,z_upper]);
             z_ticks = power_10_range(z_lower,z_upper);
 
-            title('$$\hat{' + params_latex(param_idx) + '}$$', 'Interpreter','latex')
-            set(gca, 'FontSize', 12);
-            set(gca, 'ZScale', 'log')
-
-            ax = gca;
+            ax.ZTick = z_ticks;
             ax.GridColor = [0 0 0];
             ax.GridAlpha = 1;
             ax.LineWidth = 1;
-            ax.GridLineStyle = '-';
-            ax.ZTick = z_ticks;
-            
+
             % Save the figure.
             exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(end)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
         end
@@ -650,14 +673,6 @@ else
 end
 
 %% Functions
-
-function out = power_10_range(min_val, max_val)
-% POWER_10_RANGE Returns the powers of 10 that are between the specified range.
-    min_exp = ceil(log10(min_val));
-    max_exp = floor(log10(max_val));
-    out = 10.^(min_exp:max_exp);
-
-end
 
 function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
 % MATCHED_FILTER_INTEGRAL Returns the matched filter output of tempA and tempB,
