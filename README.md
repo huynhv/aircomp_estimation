@@ -1,4 +1,4 @@
-This is the MATLAB code for the paper titled "Over-the-Air Computation on 
+This repository contains the MATLAB code used to generate the numerical results in my paper titled "Over-the-Air Computation on 
 Network Edge for Collaborative Estimation".
 
 # How to generate your own results:
