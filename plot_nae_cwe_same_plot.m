@@ -11,8 +11,14 @@ cwe_joint = load('joint_results.mat');
 %% define plot parameters
 params_latex = ["\alpha","t_0"];
 params_text = ["alpha","t0"];
-color_vec = ["#A2142F", "#0072BD", "#333333", "#EDB120", "#77AC30", "#7E2F8E"];
-
+color_vec = [ ...
+    "#A2142F", ... % dark red / maroon
+    "#0072BD", ... % blue (MATLAB default blue)
+    "#333333", ... % dark gray / charcoal
+    "#EDB120", ... % gold / mustard yellow
+    "#77AC30", ... % green (MATLAB default green)
+    "#7E2F8E"  ... % purple / violet
+];
 
 folder_path = "C:\Users\Vincent Huynh\Desktop\Final AirComp Results\";
 desktop_path = "C:\Users\Vincent Huynh\Desktop";
@@ -22,7 +28,7 @@ desktop_path = "C:\Users\Vincent Huynh\Desktop";
 close all
 
 % all_disjoint, all_joint
-experiment = "all_joint";
+experiment = "all_disjoint";
 
 if experiment == "all_disjoint"
     exp1 = nae_disjoint;
@@ -79,14 +85,18 @@ for agent_db_idx = 1:length(agent_db_values)
                 count_vals = count_vals(1);
             end
 
+            legend_entries = [];
+
             for count_idx = 1:length(count_vals)
                 plot(x_axis_series,(squeeze(exp1.avg_dep_var(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-^','color',color_vec(count_idx),'LineWidth', 1)
                 plot(x_axis_series,(squeeze(exp1.avg_dep_mse(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-x','color',color_vec(count_idx),'LineWidth', 1)
                 plot(x_axis_series,(squeeze(exp1.avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx),'LineWidth', 1)
+                legend_entries = [legend_entries, "NAE, S = " + count_vals(count_idx)];
 
                 plot(x_axis_series,(squeeze(exp2.avg_dep_var(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-^','color',color_vec(count_idx+3),'LineWidth', 1)
                 plot(x_axis_series,(squeeze(exp2.avg_dep_mse(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-x','color',color_vec(count_idx+3),'LineWidth', 1)
                 plot(x_axis_series,(squeeze(exp2.avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx+3),'LineWidth', 1)
+                legend_entries = [legend_entries, "CWE, S = " + count_vals(count_idx)];
             end
 
             if experiment == "agent_server_noise"
@@ -102,7 +112,7 @@ for agent_db_idx = 1:length(agent_db_values)
             set(ax, 'YScale', 'log')
 
             if scheme == "MPC"
-                legend(["NAE, S = " + sensor_vals(1:end),"CWE, S = " + sensor_vals(1:end),"VAR","MSE","CRLB"], 'Location', 'north east')
+                legend([legend_entries,"VAR","MSE","CRLB"], 'Location', 'north east')
             end
 
             % Add box around plot axes.
