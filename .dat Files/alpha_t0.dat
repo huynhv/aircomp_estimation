@@ -1,4 +1,4 @@
-% Clear all variables and close all exisiting figures
+% Clear all variables and close all exisiting figures.
 clear all
 close all
 
@@ -24,7 +24,7 @@ if experiment == "random_dropout"
     dropout_vals = [0,2,4];
     agent_db_values = [0];
     sensor_dimension = length(dropout_vals);
-    % only consider maximum number of sensors and drop from there
+    % Here we only consider maximum number of sensors and drop from there.
     sensor_vals = [10];
     
     which_dropout = zeros(nDeployments,max(dropout_vals));
@@ -439,10 +439,12 @@ for agent_db_idx = 1:length(agent_db_values)
                         temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-T_s)) + ...
                         sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-T_s));
                         crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = scaled_w_psd_constant / sum(sum((alpha_true .* mi .* temp).^2 * dt,1),2);
+                        
                         % compute closed-form variance for alpha (mainly an easy
                         % check to see if theoretical variance matches empirical
                         % variance)
                         % my_var(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = (sum(real(channel_gains).^2 .* Ei,2) .* scaled_w_psd_constant + n_psd_function_td/2 ) ./ (sum(real(channel_gains).*Ei,2).^2);
+                    
                     % Compute AC-CWE CRLBs for partial or no phase compensation
                     elseif (scheme == "PPC" || scheme == "NPC")
                         
@@ -467,6 +469,7 @@ for agent_db_idx = 1:length(agent_db_values)
                         crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = inv_zz(1,1,:);
                         % Compute CRLB for t0.
                         crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = inv_zz(2,2,:);
+                    
                     % Compute AC-CWE CRLBs for full phase compensation
                     else
                         % Compute FIM.
@@ -616,7 +619,7 @@ if experiment ~= "joint_grid"
             end
         end
     end
-%%  Surface plots
+%% Surface plots
 else
     % Create save directory if it does not exist.
     save_folder = folder_path + experiment + "_" + string(agent_db_values(end)) + "_db";
@@ -723,9 +726,9 @@ end
 
 %% Functions
 
-function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
 % MATCHED_FILTER_INTEGRAL Returns the matched filter output of tempA and tempB,
 % which is computed in a vectorized manner.
+function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
     tempC = pagemtimes(pagetranspose(tempA),tempB);
 
     diag_idx = sub2ind(size(tempC),1:S,1:S);
@@ -736,9 +739,9 @@ function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTri
     out = pagemtimes(tempD,reshape(channel_gains,S,1,1,1,nDeployments));
 end
 
-function [Qn,Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments)
 % GET_TIME_DOMAIN Returns the time-domain matrix of a given frequency domain
 % vector.
+function [Qn,Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments)
     mag_sqr_H_2 = [mag_sqr_H(1,1,:) mag_sqr_H(1,2:end,:) fliplr(conj(mag_sqr_H(1,2:end,:)))];
     Qn = ifft(mag_sqr_H_2/dt,[],2);
     L = floor(size(Qn,2)/2);
@@ -749,8 +752,8 @@ function [Qn,Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments)
     end
 end
 
-function [qg,cq] = quantize_comp(g,M)
 % QUANTIZE_COMP Returns the quantized sensor chanel phase.
+function [qg,cq] = quantize_comp(g,M)
     phi = angle(g);
     phi = phi + (2*pi)*(phi<0);
     
