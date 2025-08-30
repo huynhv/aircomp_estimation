@@ -20,8 +20,8 @@ color_vec = [ ...
     "#7E2F8E"  ... % purple / violet
 ];
 
-folder_path = "C:\Users\Vincent Huynh\Desktop\Final AirComp Results\";
-desktop_path = "C:\Users\Vincent Huynh\Desktop";
+home_dir = char(java.lang.System.getProperty('user.home'));
+folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 %% linear plots
 

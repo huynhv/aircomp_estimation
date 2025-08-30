@@ -540,7 +540,8 @@ params_latex = ["\alpha","t_0"];
 params_text = ["alpha","t0"];
 color_vec = ["#A2142F", "#0072BD", "#333333"];
 
-folder_path = "C:\Users\Vincent Huynh\Desktop\Final AirComp Results\";
+home_dir = char(java.lang.System.getProperty('user.home'));
+folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 %% Linear plots
 if experiment ~= "joint_grid"
