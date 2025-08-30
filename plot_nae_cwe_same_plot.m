@@ -39,11 +39,11 @@ else
 end
 
 % load variables from result files
-agent_db_values = cwe_disjoint.agent_db_values;
-sensor_dimension = cwe_disjoint.sensor_dimension;
-selected_schemes = cwe_disjoint.selected_schemes;
-sensor_vals = cwe_disjoint.sensor_vals;
-channel_db_values = cwe_disjoint.channel_db_values;
+agent_db_values = exp1.agent_db_values;
+sensor_dimension = exp1.sensor_dimension;
+selected_schemes = exp1.selected_schemes;
+sensor_vals = exp1.sensor_vals;
+channel_db_values = exp1.channel_db_values;
 
 for agent_db_idx = 1:length(agent_db_values)
     % create save directory if it does not exist

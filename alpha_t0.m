@@ -10,6 +10,7 @@ rng(seed);
 % naive uses NAE, all other experiment options use CWE.
 experiment_list = ["naive_disjoint", "naive_joint", "disjoint", "joint", "joint_grid", "random_dropout"];
 experiment = "naive_disjoint";
+save = true;
 
 % Set number of deployments.
 nDeployments = 100;
@@ -84,10 +85,6 @@ n = (randn(K,1,nTrials,nDeployments) + 1i*randn(K,1,nTrials,nDeployments));
 % Generate channel gains.
 all_gi = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),1,nDeployments))/sqrt(2);
 
-% Define Rayleigh distribution parameters.
-rayleigh_factor = 1/sqrt(2);
-E_mag_g_sqr = 2*rayleigh_factor^2;
-
 % Choose which schemes we want to plot. Note that although we still generate the
 % results for NPC, we do not necessarily plot them. there is no gurantee that
 % more sensors will perform better for NPC due to the uncompensated channel
@@ -100,6 +97,10 @@ all_ti = unifrnd(min_ti,max_ti,1,max(sensor_vals),1,nDeployments);
 
 % Define expected value of mi^2.
 E_mi_sqr = (1/12) * (max_mi-min_mi)^2 + 0.5*(min_mi+max_mi);
+
+% Define Rayleigh distribution parameters.
+rayleigh_factor = 1/sqrt(2);
+E_mag_g_sqr = 2*rayleigh_factor^2;
 
 % Define channel snr values.
 channel_snr = [0,5,10,15,20];
@@ -510,12 +511,14 @@ else
 end
 
 %% Save experiment results.
-if ~any(experiment == experiment_list)
-    error("Unknown experiment specified. Results not saved!")
-else
-    save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
-        "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
-        "experiment","exp_split","sensor_dimension")
+if save
+    if ~any(experiment == experiment_list)
+        error("Unknown experiment specified. Results not saved!")
+    else
+        save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
+            "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
+            "experiment","exp_split","sensor_dimension")
+    end
 end
 
 %% Define plot parameters.
@@ -615,7 +618,9 @@ if experiment ~= "joint_grid"
                 ax.LineWidth = 1;
 
                 % Save the figure.
-                exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
+                if save
+                    exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
+                end
             end
         end
     end
