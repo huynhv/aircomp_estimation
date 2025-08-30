@@ -7,10 +7,10 @@ seed = 264;
 rng(seed);
 
 % Choose which experiment to run.
-% naive uses NAE, all other experiment options use CWE.
-experiment_list = ["naive_disjoint", "naive_joint", "disjoint", "joint", "joint_grid", "random_dropout"];
-experiment = "naive_disjoint";
-save = true;
+% naive uses NAE, all other experiment options use CWE. tpi is the time of
+% propagation between the sensor and the server
+experiment_list = ["naive_disjoint", "naive_joint", "disjoint", "joint", "joint_grid", "random_dropout", "naive_joint_imperfect_tpi", "joint_imperfect_tpi"];
+experiment = "naive_joint_imperfect_tpi";
 
 % Set number of deployments.
 nDeployments = 100;
@@ -71,12 +71,18 @@ t0_true = 1;
 % Define range for distribution of mi and ti (tau_i)
 max_mi = 1;
 min_mi = 0.5;
+
 max_ti = 1;
 min_ti = 0;
 
+% Set max tpi value based on sampling rate to give a frame of reference as to
+% how many sample the error may shift the peak
+max_tpi = 0.02;
+min_tpi = 0;
+
 % Set maximum value of t0 such that the signal from each sensor is guaranteed to
 % be in the interioir of the observation period.
-t0_max = T_obs-T_s-max_ti;
+t0_max = T_obs-T_s-max_ti-max_tpi;
 
 % Generate sensor noise with dimensions: K x S x trials x deployments.
 all_w = randn(K,max(sensor_vals),nTrials,nDeployments);
@@ -84,6 +90,17 @@ all_w = randn(K,max(sensor_vals),nTrials,nDeployments);
 n = (randn(K,1,nTrials,nDeployments) + 1i*randn(K,1,nTrials,nDeployments));
 % Generate channel gains.
 all_gi = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),1,nDeployments))/sqrt(2);
+
+% Generate clock offset vector if needed
+if strjoin(exp_split(end-1:end), "_") == "imperfect_tpi"
+    all_tpi = unifrnd(min_tpi, max_tpi, 1,max(sensor_vals),1,nDeployments);
+else
+    all_tpi = zeros(size(all_tpi));
+end
+
+% Define Rayleigh distribution parameters.
+rayleigh_factor = 1/sqrt(2);
+E_mag_g_sqr = 2*rayleigh_factor^2;
 
 % Choose which schemes we want to plot. Note that although we still generate the
 % results for NPC, we do not necessarily plot them. there is no gurantee that
@@ -97,10 +114,6 @@ all_ti = unifrnd(min_ti,max_ti,1,max(sensor_vals),1,nDeployments);
 
 % Define expected value of mi^2.
 E_mi_sqr = (1/12) * (max_mi-min_mi)^2 + 0.5*(min_mi+max_mi);
-
-% Define Rayleigh distribution parameters.
-rayleigh_factor = 1/sqrt(2);
-E_mag_g_sqr = 2*rayleigh_factor^2;
 
 % Define channel snr values.
 channel_snr = [0,5,10,15,20];
@@ -142,6 +155,7 @@ for agent_db_idx = 1:length(agent_db_values)
             % Select subset of mi, ti, and gi values.
             mi = all_mi(:,1:S,:,:);
             ti = all_ti(:,1:S,:,:);
+            tpi = all_tpi(:,1:S,:,:);
             gi = all_gi(:,1:S,:,:);
 
             % Calculate quantized phase.
@@ -204,7 +218,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     %%%%%%%%%%%%%%%%% ESTIMATION %%%%%%%%%%%%%%%%%
    
                     % Find peak index from noisy channel-weighted sum (cws).
-                    cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                    cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
                     % Generate y(t).
                     y = cws + pagetranspose(scaled_n);
 
@@ -214,7 +228,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     % could select a t0 value such that the joint estimate for
                     % alpha = 0/0, which will result in NaN.
 
-                    y_searchable = y(:,1:(t0_max/dt + 1),:,:);
+                    y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
                     if exp_split(1) == "naive" || scheme == "MPC" || scheme == "EPC"
                         [~,I] = max(abs(real(y_searchable)));
                     else
@@ -246,8 +260,10 @@ for agent_db_idx = 1:length(agent_db_values)
                             peak_y_vals = y(linear_indices);
                             peak_y_vals = reshape(peak_y_vals,size(I));
                         elseif exp_split(2) == "disjoint"
-                            % Compute y(t0).
-                            t0_cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-repmat(t0_true,1,1,K)), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                            % Compute y(t0). We have the index of what we think
+                            % is the peak value of y (where all the matched
+                            % filter peaks should line up).
+                            t0_cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-repmat(t0_true,1,1,K)), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
                             % All column idx in t0_cws are the same currently,
                             % hence 2nd idx = 1.
                             peak_y_vals =  t0_cws(:,1,:,:) + pagetranspose(scaled_n(1,1,:,:));
@@ -511,14 +527,12 @@ else
 end
 
 %% Save experiment results.
-if save
-    if ~any(experiment == experiment_list)
-        error("Unknown experiment specified. Results not saved!")
-    else
-        save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
-            "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
-            "experiment","exp_split","sensor_dimension")
-    end
+if ~any(experiment == experiment_list)
+    error("Unknown experiment specified. Results not saved!")
+else
+    save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
+        "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
+        "experiment","exp_split","sensor_dimension")
 end
 
 %% Define plot parameters.
@@ -618,9 +632,7 @@ if experiment ~= "joint_grid"
                 ax.LineWidth = 1;
 
                 % Save the figure.
-                if save
-                    exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
-                end
+                exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
             end
         end
     end

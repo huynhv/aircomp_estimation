@@ -1,12 +1,11 @@
-% plot NAE and CWE on same plot
+% plot perfect tpi and imperfect tpi results
 clear all
 close all
 
-%% load nae and cwe results
-nae_disjoint = load('naive_disjoint_results.mat');
-nae_joint = load('naive_joint_results.mat');
-cwe_disjoint = load('disjoint_results.mat');
-cwe_joint = load('joint_results.mat');
+nae_joint_perf_tpi = load('naive_joint_results.mat');
+nae_joint_imperf_tpi = load('naive_joint_imperfect_tpi_results.mat');
+cwe_joint_perf_tpi = load('joint_results.mat');
+cwe_joint_imperf_tpi = load('joint_imperfect_tpi_results.mat');
 
 %% define plot parameters
 params_latex = ["\alpha","t_0"];
@@ -28,14 +27,14 @@ desktop_path = "C:\Users\Vincent Huynh\Desktop";
 close all
 
 % all_disjoint, all_joint
-experiment = "all_disjoint";
+experiment = "naive";
 
-if experiment == "all_disjoint"
-    exp1 = nae_disjoint;
-    exp2 = cwe_disjoint;
+if experiment == "naive"
+    exp1 = nae_joint_perf_tpi;
+    exp2 = nae_joint_imperf_tpi;
 else
-    exp1 = nae_joint;
-    exp2 = cwe_joint;
+    exp1 = cwe_joint_perf_tpi;
+    exp2 = cwe_joint_imperf_tpi;
 end
 
 % load variables from result files
@@ -91,12 +90,12 @@ for agent_db_idx = 1:length(agent_db_values)
                 plot(x_axis_series,(squeeze(exp1.avg_dep_var(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-^','color',color_vec(count_idx),'LineWidth', 1)
                 plot(x_axis_series,(squeeze(exp1.avg_dep_mse(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-x','color',color_vec(count_idx),'LineWidth', 1)
                 plot(x_axis_series,(squeeze(exp1.avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx),'LineWidth', 1)
-                legend_entries = [legend_entries, "NAE, S = " + count_vals(count_idx)];
+                legend_entries = [legend_entries, "Sync., S = " + count_vals(count_idx)];
 
                 plot(x_axis_series,(squeeze(exp2.avg_dep_var(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-^','color',color_vec(count_idx+3),'LineWidth', 1)
                 plot(x_axis_series,(squeeze(exp2.avg_dep_mse(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-x','color',color_vec(count_idx+3),'LineWidth', 1)
-                plot(x_axis_series,(squeeze(exp2.avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx+3),'LineWidth', 1)
-                legend_entries = [legend_entries, "CWE, S = " + count_vals(count_idx)];
+                % plot(x_axis_series,(squeeze(exp2.avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx+3),'LineWidth', 1)
+                legend_entries = [legend_entries, "Unsync., S = " + count_vals(count_idx)];
             end
 
             if experiment == "agent_server_noise"
