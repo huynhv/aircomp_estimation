@@ -28,7 +28,7 @@ folder_path = home_dir + "\Desktop\Final AirComp Results\";
 close all
 
 % all_disjoint, all_joint
-experiment = "all_disjoint";
+experiment = "all_joint";
 
 if experiment == "all_disjoint"
     exp1 = nae_disjoint;

@@ -26,10 +26,10 @@ folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 close all
 
-% all_disjoint, all_joint
-experiment = "naive";
+% nae, cwe
+experiment = "cwe";
 
-if experiment == "naive"
+if experiment == "nae"
     exp1 = nae_joint_perf_tpi;
     exp2 = nae_joint_imperf_tpi;
 else
@@ -98,11 +98,8 @@ for agent_db_idx = 1:length(agent_db_values)
                 legend_entries = [legend_entries, "Unsync., S = " + count_vals(count_idx)];
             end
 
-            if experiment == "agent_server_noise"
-                xlabel('$$\Gamma$$','Interpreter','latex')
-            else
-                xlabel('Channel SNR (dB)')
-            end
+            
+            xlabel('Channel SNR (dB)')
             ylabel(" ")
 
             % title('$$\hat{'+params(jj)+'}$$, ' + selected_schemes(scheme_idx),'Interpreter','latex')

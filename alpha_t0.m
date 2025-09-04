@@ -10,7 +10,7 @@ rng(seed);
 % naive uses NAE, all other experiment options use CWE. tpi is the time of
 % propagation between the sensor and the server
 experiment_list = ["naive_disjoint", "naive_joint", "disjoint", "joint", "joint_grid", "random_dropout", "naive_joint_imperfect_tpi", "joint_imperfect_tpi"];
-experiment = "naive_joint_imperfect_tpi";
+experiment = "naive_disjoint";
 
 % Set number of deployments.
 nDeployments = 100;
@@ -91,13 +91,6 @@ n = (randn(K,1,nTrials,nDeployments) + 1i*randn(K,1,nTrials,nDeployments));
 % Generate channel gains.
 all_gi = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),1,nDeployments))/sqrt(2);
 
-% Generate clock offset vector if needed
-if strjoin(exp_split(end-1:end), "_") == "imperfect_tpi"
-    all_tpi = unifrnd(min_tpi, max_tpi, 1,max(sensor_vals),1,nDeployments);
-else
-    all_tpi = zeros(size(all_tpi));
-end
-
 % Define Rayleigh distribution parameters.
 rayleigh_factor = 1/sqrt(2);
 E_mag_g_sqr = 2*rayleigh_factor^2;
@@ -111,6 +104,13 @@ selected_schemes = ["MPC","EPC","PPC","NPC"];
 % Generate mi and ti.
 all_mi = unifrnd(min_mi,max_mi,1,max(sensor_vals),1,nDeployments);
 all_ti = unifrnd(min_ti,max_ti,1,max(sensor_vals),1,nDeployments);
+
+% Generate clock offset vector if needed
+if experiment == "naive_joint_imperfect_tpi" || experiment == "joint_imperfect_tpi"
+    all_tpi = unifrnd(min_tpi, max_tpi, 1,max(sensor_vals),1,nDeployments);
+else
+    all_tpi = zeros(1,max(sensor_vals),1,nDeployments);
+end
 
 % Define expected value of mi^2.
 E_mi_sqr = (1/12) * (max_mi-min_mi)^2 + 0.5*(min_mi+max_mi);
@@ -178,8 +178,8 @@ for agent_db_idx = 1:length(agent_db_values)
                     % Print statement for at-a-glance performance.
                     disp('')
                     disp("=== " + scheme + " ===")
-                    disp("** Agent SNR = " + (agent_db_values(agent_db_idx)) + " dB**")
-                    disp("** Channel SNR = " + (channel_db_values(scheme_idx,channel_db_idx,agent_db_idx)) + " dB**")
+                    disp("** Agent SNR = " + (agent_db_values(agent_db_idx)) + " dB **")
+                    disp("** Channel SNR = " + (channel_db_values(scheme_idx,channel_db_idx,agent_db_idx)) + " dB **")
                     disp("** S = " + S + ", Dropout = " + dropout_vals(dropout_idx) + " **")
 
                     % Define channel gains and server noise power.
@@ -509,7 +509,7 @@ end
 % Stop run timer.
 runtime = toc(loopTic);
 % Display total run time.
-disp(floor(runtime/60) + " minutes " + mod(runtime,60) + " seconds")
+disp(experiment + " took " + floor(runtime/60) + " minutes " + mod(runtime,60) + " seconds")
 
 %% Compute averages across deployments.
 if nDeployments == 1
