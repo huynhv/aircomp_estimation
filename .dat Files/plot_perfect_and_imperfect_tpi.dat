@@ -26,8 +26,8 @@ folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 close all
 
-% nae_all_tpi, cwe_all_tpi
-experiment = "nae_all_tpi";
+% nae_joint_all_tpi, cwe_joint_all_tpi
+experiment = "nae_joint_all_tpi";
 
 if experiment == "nae_all_tpi"
     exp1 = nae_joint_perf_tpi;

@@ -237,7 +237,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     
                     % Set t0 estimates to true or estimated values depending on
                     % experiment.
-                    if experiment == "cwe_disjoint"
+                    if experiment == "cwe_disjoint" || experiment == "nae_disjoint"
                         t0_estimates = t0_true*ones(1,1,nTrials,nDeployments);
                     else
                         t0_estimates = t0_estimates_for_plot;
@@ -462,41 +462,43 @@ for agent_db_idx = 1:length(agent_db_values)
                         % my_var(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = (sum(real(channel_gains).^2 .* Ei,2) .* scaled_w_psd_constant + n_psd_function_td/2 ) ./ (sum(real(channel_gains).*Ei,2).^2);
                     
                     % Compute AC-CWE CRLBs for partial or no phase compensation
-                    elseif (scheme == "PPC" || scheme == "NPC")
+                    elseif exp_split(1) == "cwe"
+                        if (scheme == "PPC" || scheme == "NPC")
+                            
+                            % Compute decorrelated derivative expressions for alpha.
+                            dsdR_alpha = dt*(pagemtimes(pagetranspose(real(dsalpha)),hdR_matrix) - pagemtimes(pagetranspose(imag(dsalpha)),hdI_matrix));
+                            dsdI_alpha = dt*(pagemtimes(pagetranspose(imag(dsalpha)),hdR_matrix) + pagemtimes(pagetranspose(real(dsalpha)),hdI_matrix));
+    
+                            % Compute decorrelated derivative expressions for t0.
+                            dsdR_t0 = dt*(pagemtimes(pagetranspose(real(dst0)),hdR_matrix) - pagemtimes(pagetranspose(imag(dst0)),hdI_matrix));
+                            dsdI_t0 = dt*(pagemtimes(pagetranspose(imag(dst0)),hdR_matrix) + pagemtimes(pagetranspose(real(dst0)),hdI_matrix));
+    
+                            % Compute fisher information matrix (FIM).
+                            fisher_matrix = dt*dt*[(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)))...
+                                        (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)));...
+                                        (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)))...
+                                        (pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)))];
+    
+                            % Compute inverse of FIM, should be diagonal matrix,
+                            % diagonal terms are CRLBs.
+                            inv_zz = pageinv(fisher_matrix);
+                            % Compute CRLB for alpha.
+                            crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = inv_zz(1,1,:);
+                            % Compute CRLB for t0.
+                            crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = inv_zz(2,2,:);
                         
-                        % Compute decorrelated derivative expressions for alpha.
-                        dsdR_alpha = dt*(pagemtimes(pagetranspose(real(dsalpha)),hdR_matrix) - pagemtimes(pagetranspose(imag(dsalpha)),hdI_matrix));
-                        dsdI_alpha = dt*(pagemtimes(pagetranspose(imag(dsalpha)),hdR_matrix) + pagemtimes(pagetranspose(real(dsalpha)),hdI_matrix));
-
-                        % Compute decorrelated derivative expressions for t0.
-                        dsdR_t0 = dt*(pagemtimes(pagetranspose(real(dst0)),hdR_matrix) - pagemtimes(pagetranspose(imag(dst0)),hdI_matrix));
-                        dsdI_t0 = dt*(pagemtimes(pagetranspose(imag(dst0)),hdR_matrix) + pagemtimes(pagetranspose(real(dst0)),hdI_matrix));
-
-                        % Compute fisher information matrix (FIM).
-                        fisher_matrix = dt*dt*[(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)))...
-                                    (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)));...
-                                    (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)))...
-                                    (pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)))];
-
-                        % Compute inverse of FIM, should be diagonal matrix,
-                        % diagonal terms are CRLBs.
-                        inv_zz = pageinv(fisher_matrix);
-                        % Compute CRLB for alpha.
-                        crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = inv_zz(1,1,:);
-                        % Compute CRLB for t0.
-                        crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = inv_zz(2,2,:);
-                    
-                    % Compute AC-CWE CRLBs for full phase compensation
-                    else
-                        % Compute FIM.
-                        fisher_matrix = dt*dt*[pagemtimes(pagemtimes(pagetranspose(dsalpha),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha);...
-                            pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dst0)];
-                        % Compute inverse of FIM.
-                        inv_zz = pageinv(fisher_matrix);
-                        % Compute CRLB for alpha.
-                        crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = inv_zz(1,1,:);
-                        % Compute CRLB for t0.
-                        crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = inv_zz(2,2,:);
+                        % Compute AC-CWE CRLBs for full phase compensation
+                        else
+                            % Compute FIM.
+                            fisher_matrix = dt*dt*[pagemtimes(pagemtimes(pagetranspose(dsalpha),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha);...
+                                pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dst0)];
+                            % Compute inverse of FIM.
+                            inv_zz = pageinv(fisher_matrix);
+                            % Compute CRLB for alpha.
+                            crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = inv_zz(1,1,:);
+                            % Compute CRLB for t0.
+                            crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = inv_zz(2,2,:);
+                        end
                     end
                     disp('')
                 end
