@@ -2,10 +2,10 @@
 clear all
 close all
 
-nae_joint_perf_tpi = load('naive_joint_results.mat');
-nae_joint_imperf_tpi = load('naive_joint_imperfect_tpi_results.mat');
-cwe_joint_perf_tpi = load('joint_results.mat');
-cwe_joint_imperf_tpi = load('joint_imperfect_tpi_results.mat');
+nae_joint_perf_tpi = load('nae_joint_results.mat');
+nae_joint_imperf_tpi = load('nae_joint_imperfect_tpi_results.mat');
+cwe_joint_perf_tpi = load('cwe_joint_results.mat');
+cwe_joint_imperf_tpi = load('cwe_joint_imperfect_tpi_results.mat');
 
 %% define plot parameters
 params_latex = ["\alpha","t_0"];
@@ -19,17 +19,17 @@ color_vec = [ ...
     "#7E2F8E"  ... % purple / violet
 ];
 
-folder_path = "C:\Users\Vincent Huynh\Desktop\Final AirComp Results\";
-desktop_path = "C:\Users\Vincent Huynh\Desktop";
+home_dir = char(java.lang.System.getProperty('user.home'));
+folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 %% linear plots
 
 close all
 
-% all_disjoint, all_joint
-experiment = "naive";
+% nae_all_tpi, cwe_all_tpi
+experiment = "nae_all_tpi";
 
-if experiment == "naive"
+if experiment == "nae_all_tpi"
     exp1 = nae_joint_perf_tpi;
     exp2 = nae_joint_imperf_tpi;
 else
@@ -98,11 +98,8 @@ for agent_db_idx = 1:length(agent_db_values)
                 legend_entries = [legend_entries, "Unsync., S = " + count_vals(count_idx)];
             end
 
-            if experiment == "agent_server_noise"
-                xlabel('$$\Gamma$$','Interpreter','latex')
-            else
-                xlabel('Channel SNR (dB)')
-            end
+            
+            xlabel('Channel SNR (dB)')
             ylabel(" ")
 
             % title('$$\hat{'+params(jj)+'}$$, ' + selected_schemes(scheme_idx),'Interpreter','latex')

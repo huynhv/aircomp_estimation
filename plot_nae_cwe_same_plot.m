@@ -3,10 +3,10 @@ clear all
 close all
 
 %% load nae and cwe results
-nae_disjoint = load('naive_disjoint_results.mat');
-nae_joint = load('naive_joint_results.mat');
-cwe_disjoint = load('disjoint_results.mat');
-cwe_joint = load('joint_results.mat');
+nae_disjoint = load('nae_disjoint_results.mat');
+nae_joint = load('nae_joint_results.mat');
+cwe_disjoint = load('cwe_disjoint_results.mat');
+cwe_joint = load('cwe_joint_results.mat');
 
 %% define plot parameters
 params_latex = ["\alpha","t_0"];
@@ -28,7 +28,7 @@ folder_path = home_dir + "\Desktop\Final AirComp Results\";
 close all
 
 % all_disjoint, all_joint
-experiment = "all_joint";
+experiment = "all_disjoint";
 
 if experiment == "all_disjoint"
     exp1 = nae_disjoint;

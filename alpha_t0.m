@@ -7,10 +7,9 @@ seed = 264;
 rng(seed);
 
 % Choose which experiment to run.
-% naive uses NAE, all other experiment options use CWE. tpi is the time of
-% propagation between the sensor and the server
-experiment_list = ["naive_disjoint", "naive_joint", "disjoint", "joint", "joint_grid", "random_dropout", "naive_joint_imperfect_tpi", "joint_imperfect_tpi"];
-experiment = "naive_disjoint";
+
+experiment_list = ["nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi"];
+experiment = "nae_disjoint";
 
 % Set number of deployments.
 nDeployments = 100;
@@ -33,7 +32,7 @@ if experiment == "random_dropout"
         which_dropout(idx,:) = randperm(max(sensor_vals),max(dropout_vals));
     end
 else
-    if experiment == "joint_grid"
+    if experiment == "cwe_joint_grid"
         sensor_vals = [5];
         agent_db_values = [0,5,10,15,20];
     else
@@ -106,7 +105,7 @@ all_mi = unifrnd(min_mi,max_mi,1,max(sensor_vals),1,nDeployments);
 all_ti = unifrnd(min_ti,max_ti,1,max(sensor_vals),1,nDeployments);
 
 % Generate clock offset vector if needed
-if experiment == "naive_joint_imperfect_tpi" || experiment == "joint_imperfect_tpi"
+if experiment == "nae_joint_imperfect_tpi" || experiment == "cwe_joint_imperfect_tpi"
     all_tpi = unifrnd(min_tpi, max_tpi, 1,max(sensor_vals),1,nDeployments);
 else
     all_tpi = zeros(1,max(sensor_vals),1,nDeployments);
@@ -229,7 +228,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     % alpha = 0/0, which will result in NaN.
 
                     y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
-                    if exp_split(1) == "naive" || scheme == "MPC" || scheme == "EPC"
+                    if exp_split(1) == "nae" || scheme == "MPC" || scheme == "EPC"
                         [~,I] = max(abs(real(y_searchable)));
                     else
                         [~,I] = max(abs(y_searchable));
@@ -238,14 +237,14 @@ for agent_db_idx = 1:length(agent_db_values)
                     
                     % Set t0 estimates to true or estimated values depending on
                     % experiment.
-                    if experiment == "disjoint"
+                    if experiment == "cwe_disjoint"
                         t0_estimates = t0_true*ones(1,1,nTrials,nDeployments);
                     else
                         t0_estimates = t0_estimates_for_plot;
                     end
                     
                     % Compute alpha estimates for AC-NAE
-                    if exp_split(1) == "naive"
+                    if exp_split(1) == "nae"
                         if exp_split(2) == "joint"
                             % Select estimated peak index in vectorized manner.
                             II = squeeze(I);
@@ -272,7 +271,7 @@ for agent_db_idx = 1:length(agent_db_values)
                         alpha_estimates =  real(peak_y_vals) ./ sum(real(channel_gains) .* Ei,2);
 
                     % Compute alpha for AC-CWE.
-                    elseif exp_split(1) ~= "naive"
+                    elseif exp_split(1) ~= "nae"
                         % Define frequency domain parameters
                         fs = 1/dt;
                         L = K-1;
@@ -448,7 +447,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     dst0 = reshape(squeeze(sum(channel_gains .* sum(alpha_true .* mi.^2 .* temp .* sensor_signal(t-ti-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
                     
                     % Compute CRLBs for AC-NAE
-                    if exp_split(1) == "naive"
+                    if exp_split(1) == "nae"
                         
                         % CRLB for alpha
                         crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = scaled_w_psd_constant / sum(Ei,2);
@@ -544,7 +543,7 @@ home_dir = char(java.lang.System.getProperty('user.home'));
 folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 %% Linear plots
-if experiment ~= "joint_grid"
+if experiment ~= "cwe_joint_grid"
     for agent_db_idx = 1:length(agent_db_values)
         % Create save directory if it does not exist.
         save_folder = folder_path + experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db";

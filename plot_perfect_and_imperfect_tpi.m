@@ -2,10 +2,10 @@
 clear all
 close all
 
-nae_joint_perf_tpi = load('naive_joint_results.mat');
-nae_joint_imperf_tpi = load('naive_joint_imperfect_tpi_results.mat');
-cwe_joint_perf_tpi = load('joint_results.mat');
-cwe_joint_imperf_tpi = load('joint_imperfect_tpi_results.mat');
+nae_joint_perf_tpi = load('nae_joint_results.mat');
+nae_joint_imperf_tpi = load('nae_joint_imperfect_tpi_results.mat');
+cwe_joint_perf_tpi = load('cwe_joint_results.mat');
+cwe_joint_imperf_tpi = load('cwe_joint_imperfect_tpi_results.mat');
 
 %% define plot parameters
 params_latex = ["\alpha","t_0"];
@@ -26,10 +26,10 @@ folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 close all
 
-% nae, cwe
-experiment = "cwe";
+% nae_all_tpi, cwe_all_tpi
+experiment = "nae_all_tpi";
 
-if experiment == "nae"
+if experiment == "nae_all_tpi"
     exp1 = nae_joint_perf_tpi;
     exp2 = nae_joint_imperf_tpi;
 else

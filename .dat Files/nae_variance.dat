@@ -137,7 +137,11 @@ end
 % Add a super title for the whole figure
 % sgtitle(' For Increasing Number of Sensors');   % Replace with your desired title
 sgtitle('Theoretical Variance of $$\hat{\alpha}$$ vs. Number of Sensors', 'Interpreter','latex')
-save_folder = "C:\Users\Vincent Huynh\Desktop\Final AirComp Results\monotonic_variance";
+
+home_dir = char(java.lang.System.getProperty('user.home'));
+folder_path = home_dir + "\Desktop\Final AirComp Results\";
+
+save_folder = folder_path + "monotonic_variance";
 if ~exist(save_folder, 'dir')
     mkdir(save_folder);
 end

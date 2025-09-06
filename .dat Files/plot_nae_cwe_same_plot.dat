@@ -3,10 +3,10 @@ clear all
 close all
 
 %% load nae and cwe results
-nae_disjoint = load('naive_disjoint_results.mat');
-nae_joint = load('naive_joint_results.mat');
-cwe_disjoint = load('disjoint_results.mat');
-cwe_joint = load('joint_results.mat');
+nae_disjoint = load('nae_disjoint_results.mat');
+nae_joint = load('nae_joint_results.mat');
+cwe_disjoint = load('cwe_disjoint_results.mat');
+cwe_joint = load('cwe_joint_results.mat');
 
 %% define plot parameters
 params_latex = ["\alpha","t_0"];
@@ -20,8 +20,8 @@ color_vec = [ ...
     "#7E2F8E"  ... % purple / violet
 ];
 
-folder_path = "C:\Users\Vincent Huynh\Desktop\Final AirComp Results\";
-desktop_path = "C:\Users\Vincent Huynh\Desktop";
+home_dir = char(java.lang.System.getProperty('user.home'));
+folder_path = home_dir + "\Desktop\Final AirComp Results\";
 
 %% linear plots
 
