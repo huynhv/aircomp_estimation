@@ -1,6 +1,19 @@
 This repository contains the MATLAB code used to generate the numerical results in my paper titled "Over-the-Air Computation on 
 Network Edge for Collaborative Estimation". Plaintext versions of the .m files can be found in the .dat Files folder.
 
+# Known Errata
+
+## 9/30/2025  
+Around line **487**, update the condition:
+
+```matlab
+% Before
+elseif exp_split(1) == "cwe"
+
+% After
+elseif exp_split(1) == "cwe" || experiment == "random_dropout"
+
+
 # How to generate your own results:
 - Inside alpha_t0.m, change the "experiment" variable to run the desired 
 experiment corresponding to the paper. All other parameters are tailored to 
