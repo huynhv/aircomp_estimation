@@ -2,7 +2,7 @@ This repository contains the MATLAB code used to generate the numerical results 
 Network Edge for Collaborative Estimation". Plaintext versions of the .m files can be found in the .dat Files folder.
 
 # Known Errata
-A list of know errata is being compiled while the review process is underway. We have verified that regenerated results after correcting these errata still support the trends and conclusions presented in our original manuscript.
+A list of known errata has been compiled following the initial submission of the manuscript for review. The results generated after correctin of the errata still align with the claims presented in original manuscript.
 
 ## 9/30/2025  
 - When running the code with `experiment = random_dropout"`, the CRLB is not computed. Around line **487**, update the condition:
