@@ -265,9 +265,12 @@ for agent_db_idx = 1:length(agent_db_values)
                         yi_omx = ci .* xi + scaled_n(:,1:S,:,:);
                         yi_omx_tr = pagetranspose(yi_omx);
                         unified_yi = ci .* noisy_unified_xi + scaled_n(:,1:S,:,:);
+
+                        llf_search_space = zeros(1,1,K,nTrials,nDeployments);
+                        denom_space = zeros(1,1,K,1,nDeployments);
                         
                         if scheme == "MPC" || scheme == "EPC"
-                            % cws_omx = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(ci .* mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), 1 ./ scaled_vi_psd_constant, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                            % cws_omx = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(ci .* mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,K)), K,S,K,1,nDeployments), 1 ./ scaled_vi_psd_constant, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
                             % cws_searchable = cws_omx(:,1:(floor(t0_max/dt) + 1),:,:);
 
                             %%% convolution using FFT checks different offsets for me so I don't have to do it manually
@@ -277,6 +280,15 @@ for agent_db_idx = 1:length(agent_db_values)
                             [~,I] = max(cws_searchable);
                         
                         elseif scheme == "PPC" || scheme == "NPC"
+
+                            dsalpha = ci .* mi .* sensor_signal(t-ti-t0_true);
+                            temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-Tp)) + sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-Tp));
+                            dst0 = ci .* alpha_true .* mi .* temp;
+
+                            % fisher_alpha_accum = 0;
+                            % fisher_t0_accum = 0;
+                            fisher_matrix_accum = zeros(2,2,nDeployments);
+
                             real_channel = real(ci);
                             imag_channel = imag(ci);
         
@@ -288,7 +300,6 @@ for agent_db_idx = 1:length(agent_db_values)
                             a2 = (-1 - sqrt(discr)) ./ (2*b);
                             a_select = a1;
 
-                            llf_search_space = zeros(K,nTrials,nDeployments);
 
                             for i = 1:S
                                 cR = real_channel(:,i,:,:);
@@ -339,7 +350,7 @@ for agent_db_idx = 1:length(agent_db_values)
                                 [~,QnR_matrix] = get_time_domain(SQnR,dt,nDeployments);
                                 [~,QnI_matrix] = get_time_domain(SQnI,dt,nDeployments);
         
-                                aaa = pagetranspose((cR + 1i*cI) .* mi(:,i,:,:) .* sensor_signal(t-ti(:,i,:,:)-reshape(t,1,1,length(t))));
+                                aaa = pagetranspose((cR + 1i*cI) .* mi(:,i,:,:) .* sensor_signal(t-ti(:,i,:,:)-reshape(t,1,1,K)));
                                 aaa = reshape(aaa,1,K,K,1,nDeployments);
                                 
                                 aaaR = real(aaa);
@@ -365,154 +376,20 @@ for agent_db_idx = 1:length(agent_db_values)
                                 yidR = real(yid);
                                 yidI = imag(yid);
 
-                                resh_QnR_matrix = reshape(QnR_matrix,length(t),length(t),1,nDeployments);
-                                resh_QnI_matrix = reshape(QnI_matrix,length(t),length(t),1,nDeployments);
+                                resh_QnR_matrix = reshape(QnR_matrix,K,K,1,nDeployments);
+                                resh_QnI_matrix = reshape(QnI_matrix,K,K,1,nDeployments);
         
                                 num1 = dt*dt*pagemtimes(reshape(pagemtimes(yidR,resh_QnR_matrix), 1,K,1,nTrials,nDeployments),pagetranspose(aaadR));
                                 num2 = dt*dt*pagemtimes(reshape(pagemtimes(yidI,resh_QnI_matrix), 1,K,1,nTrials,nDeployments),pagetranspose(aaadI));
 
-                                llf_search_space = llf_search_space + squeeze(num1 + num2);
-                            end
+                                resh_QnR_matrix2 = reshape(QnR_matrix,K,K,1,1,nDeployments);
+                                resh_QnI_matrix2 = reshape(QnI_matrix,K,K,1,1,nDeployments);
 
-                            [~,I] = max(llf_search_space, [], 1);
-                            I = reshape(I, 1, 1, nTrials, nDeployments);
-                        end
-                    else
-                        % Find peak index from noisy channel-weighted sum (cws).
-                        % cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
-                        % y = cws + pagetranspose(scaled_n(:,1,:,:));
-                        % y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
+                                denom1 = dt*dt*pagemtimes(pagemtimes(aaadR,resh_QnR_matrix2),pagetranspose(aaadR));
+                                denom2 = dt*dt*pagemtimes(pagemtimes(aaadI,resh_QnI_matrix2),pagetranspose(aaadI));
 
-                        [cws_2, ~] = mf_integral_fft(noisy_unified_xi, mi .* sensor_signal(t-tpi), ci, 1, K, dt, Tp);
-                        y = pagetranspose(cws_2) + pagetranspose(scaled_n(:,1,:,:));
-                        y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
-
-                        if contains(experiment, "nae") || scheme == "MPC" || scheme == "EPC"
-                            [~,I] = max(abs(real(y_searchable)));
-                        else
-                            [~,I] = max(abs(y_searchable));
-                        end
-                    end
-                    t0_estimates_for_plot = (I-1)*dt;
-                    % Set t0 estimates to true or estimated values depending on
-                    % experiment.
-                    if contains(experiment, "_disjoint") % experiment == "cwe_disjoint" || experiment == "nae_disjoint" || experiment == "omx_disjoint"
-                        t0_estimates = t0_true*ones(1,1,nTrials,nDeployments);
-                        I_for_alpha = ((t0_true/dt)+1)*ones(1,1,nTrials,nDeployments);
-                    else
-                        t0_estimates = t0_estimates_for_plot;
-                        I_for_alpha = I;
-                    end
-                    
-                    %% Estimate alpha
-                    if contains(experiment, "omx")
-                        if scheme == "MPC" || scheme == "EPC"
-                            % num_accum = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-t0_estimates),K,S,1,nTrials,nDeployments), ci ./ scaled_vi_psd_constant, 1, S, nTrials, nDeployments, dt),1,1,nTrials,nDeployments);
-                            num_accum = sum(sum(real(yi_omx) .* mi .* sensor_signal(t-ti-tpi-t0_estimates), 1)*dt .* (ci ./ scaled_vi_psd_constant), 2);
-                            denom_accum = sum(abs(ci).^2 ./ scaled_vi_psd_constant .* Ei,2);
-                        
-                        elseif scheme == "PPC" || scheme == "NPC"
-                            %% also compute CRLB in here
-                            real_channel = real(ci);
-                            imag_channel = imag(ci);
-
-                            dsalpha = ci .* mi .* sensor_signal(t-ti-t0_true);
-                            temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-Tp)) + sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-Tp));
-                            dst0 = ci .* alpha_true .* mi .* temp;
-
-                            fisher_alpha_accum = 0;
-                            fisher_t0_accum = 0;
-                            fisher_matrix_accum = zeros(2,2,nDeployments);
-
-                            % Compute polynomial to find coefficients for
-                            % decorrelation filter. 
-                            b = (real_channel.*imag_channel) ./ (real_channel.^2 - imag_channel.^2);
-                            discr = 1 + 4.*b.^2;
-                            a1 = (-1 + sqrt(discr)) ./ (2*b);
-                            a2 = (-1 - sqrt(discr)) ./ (2*b);
-                            a_select = a1;
-
-                            num_accum = zeros(1,1,nTrials,nDeployments);
-                            denom_accum = zeros(1,1,nTrials,nDeployments);
-
-                            for i = 1:S
-                                cR = real_channel(:,i,:,:);
-                                cI = imag_channel(:,i,:,:);
-                                a = a_select(:,i,:,:);
-                                yi = pagetranspose(yi_omx(:,i,:,:));
-                                
-                                % Define magnitude squared of SHdI.
-                                mag_sqr_SHdI = ones(1,K,1,nDeployments);
-    
-                                % Define magnitude of SHdI.
-                                mag_SHdI = sqrt(mag_sqr_SHdI);
-        
-                                % Get time domain matrix for hdI.
-                                [hdI, hdI_matrix] = get_time_domain(mag_SHdI,dt,nDeployments);
-    
-                                % Get time domain matrix for hdR.
-                                hdR_matrix = reshape(a,1,1,nDeployments) .* hdI_matrix;
-    
-                                % Create time domain matrix for hd.
-                                % hd_matrix = hdR_matrix + 1i*hdI_matrix;
-        
-                                % Compute pR and qR.
-                                pR = scaled_w_psd_constant * (a.*cR - cI).^2;
-                                qR = (scaled_n_psd_constant/2 * (a.^2 + 1));
-        
-                                % Compute pI and qI.
-                                pI = scaled_w_psd_constant * (cR + a.*cI).^2;
-                                qI = (scaled_n_psd_constant/2 * (a.^2 + 1));
-        
-                                % Compute SKndR and SKndI.
-                                SKndR = pR + mag_sqr_SHdI .* qR;
-                                SKndI = pI + mag_sqr_SHdI .* qI;
-        
-                                % Check to make sure SKndR and SKndI are positive.
-                                if sum(SKndR <= 0, "all")
-                                    error("SKndR less than or equal to 0!")
-                                elseif sum(SKndI <= 0, "all")
-                                    error("SKndI less than or equal to 0!")
-                                end
-        
-                                % Generate whitening filters based on inverse
-                                % spectrum.
-                                SQnR = 1 ./ SKndR;
-                                SQnI = 1 ./ SKndI;
-            
-                                % Get time domain matrix  for QnR and QnI.
-                                [~,QnR_matrix] = get_time_domain(SQnR,dt,nDeployments);
-                                [~,QnI_matrix] = get_time_domain(SQnI,dt,nDeployments);
-        
-                                % Compute closed-form expressions for alpha
-                                % aaa = reshape(matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
-        
-                                aaa = pagetranspose((cR + 1i*cI) .* mi(:,i,:,:) .* sensor_signal(t-ti(:,i,:,:)-t0_estimates));
-
-                                aaaR = real(aaa);
-                                aaaI = imag(aaa);
-        
-                                % The d here is for decorrelation, not derivative.
-                                aaadR = dt*(pagemtimes(aaaR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(aaaI,reshape(hdI_matrix,K,K,1,nDeployments)));
-                                aaadI = dt*(pagemtimes(aaaI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(aaaR,reshape(hdI_matrix,K,K,1,nDeployments)));
-        
-                                yiR = real(yi);
-                                yiI = imag(yi);
-            
-                                yidR = dt*(pagemtimes(yiR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(yiI,reshape(hdI_matrix,K,K,1,nDeployments)));
-                                yidI = dt*(pagemtimes(yiI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(yiR,reshape(hdI_matrix,K,K,1,nDeployments)));
-        
-                                resh_QnR_matrix = reshape(QnR_matrix,length(t),length(t),1,nDeployments);
-                                resh_QnI_matrix = reshape(QnI_matrix,length(t),length(t),1,nDeployments);
-        
-                                num1 = dt*dt*pagemtimes(pagemtimes(yidR,resh_QnR_matrix),pagetranspose(aaadR));
-                                num2 = dt*dt*pagemtimes(pagemtimes(yidI,resh_QnI_matrix),pagetranspose(aaadI));
-
-                                denom1 = dt*dt*pagemtimes(pagemtimes(aaadR,resh_QnR_matrix),pagetranspose(aaadR));
-                                denom2 = dt*dt*pagemtimes(pagemtimes(aaadI,resh_QnI_matrix),pagetranspose(aaadI));
-
-                                num_accum = num_accum + num1 + num2;
-                                denom_accum = denom_accum + denom1 + denom2;
+                                llf_search_space = llf_search_space + num1 + num2;
+                                denom_space = denom_space + denom1 + denom2;
 
                                 %% also compute CRLB quantities while we are here
                                 dsalpha_i = reshape(dsalpha(:,i,:,:),K,1,nDeployments);
@@ -531,12 +408,55 @@ for agent_db_idx = 1:length(agent_db_values)
                                             (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)));...
                                             (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)))...
                                             (pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)))];
-
-                                % fisher_alpha_accum = fisher_alpha_accum + dt*dt*(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)));
-                                % fisher_t0_accum = fisher_t0_accum + dt*dt*(pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)));
                             end
+
+                            [~,I] = max(llf_search_space, [], 3);
+                            I = reshape(I, 1, 1, nTrials, nDeployments);
+                            
+                            num_accum_compare = zeros(1,1,nTrials,nDeployments);
+                            denom_accum_compare = zeros(1,1,nTrials,nDeployments);
+                        
+                            for dep_idx = 1:size(llf_search_space,5)
+                                for trial_idx = 1:size(llf_search_space,4)
+                                    num_accum_compare(1,1,trial_idx,dep_idx) = llf_search_space(1,1, I(1,1,trial_idx,dep_idx), trial_idx, dep_idx);
+                                    denom_accum_compare(1,1,trial_idx,dep_idx) = denom_space(1,1, I(1,1,trial_idx,dep_idx), 1, dep_idx);
+                                end
+                            end
+                            alpha_estimates = num_accum_compare ./ denom_accum_compare;
                         end
-                        alpha_estimates = num_accum ./ denom_accum;
+                    else
+                        % Find peak index from noisy channel-weighted sum (cws).
+                        % cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,K)), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                        % y = cws + pagetranspose(scaled_n(:,1,:,:));
+                        % y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
+
+                        [cws_2, ~] = mf_integral_fft(noisy_unified_xi, mi .* sensor_signal(t-tpi), ci, 1, K, dt, Tp);
+                        y = pagetranspose(cws_2) + pagetranspose(scaled_n(:,1,:,:));
+                        y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
+
+                        if contains(experiment, "nae") || scheme == "MPC" || scheme == "EPC"
+                            [~,I] = max(abs(real(y_searchable)));
+                        else
+                            [~,I] = max(abs(y_searchable));
+                        end
+                    end
+                    t0_estimates_for_plot = (I-1)*dt;
+                    % Set t0 estimates to true or estimated values depending on
+                    % experiment.
+                    if contains(experiment, "_disjoint") % experiment == "cwe_disjoint" || experiment == "nae_disjoint" || experiment == "omx_disjoint"
+                        t0_estimates = t0_true*ones(1,1,nTrials,nDeployments);
+                    else
+                        t0_estimates = t0_estimates_for_plot;
+                    end
+                    
+                    %% Estimate alpha
+                    if contains(experiment, "omx")
+                        if scheme == "MPC" || scheme == "EPC"
+                            % num_accum = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-t0_estimates),K,S,1,nTrials,nDeployments), ci ./ scaled_vi_psd_constant, 1, S, nTrials, nDeployments, dt),1,1,nTrials,nDeployments);
+                            num_accum = sum(sum(real(yi_omx) .* mi .* sensor_signal(t-ti-tpi-t0_estimates), 1)*dt .* (ci ./ scaled_vi_psd_constant), 2);
+                            denom_accum = sum(abs(ci).^2 ./ scaled_vi_psd_constant .* Ei,2);
+                            alpha_estimates = num_accum ./ denom_accum;
+                        end
                     % Compute alpha estimates for AC-NAE
                     elseif contains(experiment, "nae")
                         if contains(experiment, "_joint")
@@ -651,7 +571,7 @@ for agent_db_idx = 1:length(agent_db_values)
                             % aaa represents sum gi int si(tau - t0_estimates)
                             % si(tau-t) dtau, where each trial will have a
                             % different t0 estimate.
-                            % aaa = reshape(matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                            % aaa = reshape(matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,K)), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
     
                             [aaa, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
                             
@@ -702,11 +622,11 @@ for agent_db_idx = 1:length(agent_db_values)
     
                             % Get time domain matrix for Qn.
                             [~, Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments);
-                            % Omega = matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), ci, K, S, nTrials, nDeployments, dt);
+                            % Omega = matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,K)), K,S,K,1,nDeployments), ci, K, S, nTrials, nDeployments, dt);
                             [Omega, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
                         
-                            num = dt*dt*pagemtimes(pagemtimes(real(y),reshape(Qn_matrix,length(t),length(t),1,nDeployments)),pagetranspose(reshape(Omega,1,length(t),nTrials,nDeployments)));
-                            denom = dt*dt*pagemtimes(pagemtimes(reshape(Omega,1,length(t),nTrials,nDeployments),reshape(Qn_matrix,length(t),length(t),1,nDeployments)),pagetranspose(reshape(Omega,1,length(t),nTrials,nDeployments)));
+                            num = dt*dt*pagemtimes(pagemtimes(real(y),reshape(Qn_matrix,K,K,1,nDeployments)),pagetranspose(reshape(Omega,1,K,nTrials,nDeployments)));
+                            denom = dt*dt*pagemtimes(pagemtimes(reshape(Omega,1,K,nTrials,nDeployments),reshape(Qn_matrix,K,K,1,nDeployments)),pagetranspose(reshape(Omega,1,K,nTrials,nDeployments)));
                         end
                         alpha_estimates = num ./ denom;
                     end
@@ -763,9 +683,9 @@ for agent_db_idx = 1:length(agent_db_values)
                     % Compute AC-CWE CRLBs for partial or no phase compensation
                     % 9/30/2025 - Add random_dropout logic
                     elseif contains(experiment, "cwe") || experiment == "random_dropout"
-                        dsalpha = reshape(squeeze(sum(ci .* sum(mi .* sensor_signal(t-ti-t0_true) .* mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
+                        dsalpha = reshape(squeeze(sum(ci .* sum(mi .* sensor_signal(t-ti-t0_true) .* mi .* sensor_signal(t-ti-reshape(t,1,1,K)) * dt,1),2)),K,1,nDeployments);
                         temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-Tp)) + sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-Tp));
-                        dst0 = reshape(squeeze(sum(ci .* sum(alpha_true .* mi.^2 .* temp .* sensor_signal(t-ti-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
+                        dst0 = reshape(squeeze(sum(ci .* sum(alpha_true .* mi.^2 .* temp .* sensor_signal(t-ti-reshape(t,1,1,K)) * dt,1),2)),K,1,nDeployments);
                         
                         alpha_objective_array = @(ai) 1./( ((sum(ci .* ai .* mi.^2)).^2 / (2*pi)) .* integral(@(w) (mag_sqr_S0(w)).^2 / V_arr(w,ai), -Inf, Inf, 'ArrayValued', true));
                         t0_objective_array = @(ai) 1./( (alpha_true^2 .* (sum(ci .* ai .* mi.^2)).^2 / (2*pi)) .* integral(@(w) (w .* mag_sqr_S0(w)).^2 / V_arr(w,ai), -Inf, Inf, 'ArrayValued', true));
