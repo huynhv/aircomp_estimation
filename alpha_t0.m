@@ -6,8 +6,8 @@ close all
 % Choose which experiment to run.
 % "omx_disjoint", "omx_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi"
 experiment_list = ["omx_disjoint", "omx_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", ...
-                    "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi", "comp_cwe_disjoint"];
-experiment = "omx_disjoint";
+                    "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi", "comp_cwe_disjoint", "comp_cwe_joint"];
+experiment = "omx_joint";
 
 msg = ['Running ' char(experiment)];
 border = repmat('─', 1, length(msg)+4);
@@ -21,12 +21,12 @@ seed = 264;
 rng(seed);
 
 % Set number of deployments.
-nDeployments = 100;
+nDeployments = 50;
 % Set number of trials.
 nTrials = 500;
 % Set the number of measurements per sensor. The sample index starts at 0 so
 % sampling from index 0 to 100 requires K = 101 measurements.
-K = 301;
+K = 151;
 
 % Set some bookkeeping variables depending on which experiment we are running.
 if experiment == "random_dropout"
@@ -40,10 +40,10 @@ else
         sensor_vals = 5;
         agent_db_values = [0,5,10,15,20];
     elseif contains(experiment, "omx")
-        sensor_vals = [6];
+        sensor_vals = [3];
         agent_db_values = 0;
     elseif contains(experiment, "comp")
-        sensor_vals = [5,6,7];
+        sensor_vals = [2,4,6];
         agent_db_values = 0;
     else
         sensor_vals = [5,10];
@@ -107,19 +107,15 @@ n = (randn(K,max_sensor_limit,nTrials,nDeployments) + 1i*randn(K,max_sensor_limi
 % Generate channel gains.
 all_gi = (randn(1,max_sensor_limit,1,nDeployments) + 1i*randn(1,max_sensor_limit,1,nDeployments))/sqrt(2);
 
-% Define Rayleigh distribution parameters.
-rayleigh_factor = 1/sqrt(2);
-E_mag_g_sqr = 2*rayleigh_factor^2;
+% Generate mi and ti.
+all_mi = unifrnd(min_mi,max_mi,1,max_sensor_limit,1,nDeployments);
+all_ti = unifrnd(min_ti,max_ti,1,max_sensor_limit,1,nDeployments);
 
 % Choose which schemes we want to plot. Note that although we still generate the
 % results for NPC, we do not necessarily plot them. there is no gurantee that
 % more sensors will perform better for NPC due to the uncompensated channel
 % phase.
-selected_schemes = ["MPC", "EPC", "PPC", "NPC"];
-
-% Generate mi and ti.
-all_mi = unifrnd(min_mi,max_mi,1,max(sensor_vals),1,nDeployments);
-all_ti = unifrnd(min_ti,max_ti,1,max(sensor_vals),1,nDeployments);
+selected_schemes = ["EPC","PPC"];
 
 % Generate clock offset vector if needed
 if experiment == "nae_joint_imperfect_tpi" || experiment == "cwe_joint_imperfect_tpi"
@@ -136,6 +132,10 @@ if experiment == "random_dropout"
         which_dropout(idx,:) = randperm(max(sensor_vals),max(dropout_vals));
     end
 end
+
+% Define Rayleigh distribution parameters.
+rayleigh_factor = 1/sqrt(2);
+E_mag_g_sqr = 2*rayleigh_factor^2;
 
 % Define expected value of mi^2.
 E_mi_sqr = (1/12) * (max_mi-min_mi)^2 + 0.5*(min_mi+max_mi);
@@ -171,7 +171,7 @@ for agent_db_idx = 1:length(agent_db_values)
     w_psd_constant = 1;
     gamma_w = (dt/w_psd_constant) * (P_s / db2magTen(agent_db));
     scaled_w = sqrt(gamma_w * w_psd_constant /dt) * all_w; % --> variance of this should be gamma_w/dt
-    scaled_w_psd_constant = gamma_w * w_psd_constant;
+    scaled_w_psd_constant = gamma_w * w_psd_constant; %% = Nw/2
 
     % Iterate through sensor values.
     for sensor_idx = 1:length(sensor_vals)
@@ -198,8 +198,7 @@ for agent_db_idx = 1:length(agent_db_values)
             % Compute Ei.
             Ei = sum(abs(si_true).^2 .* dt,1); % 1 x S
 
-            clean_unified_xi = alpha_true .* (mi .* sensor_signal(t-t0_true));
-            noisy_unified_xi = clean_unified_xi + scaled_w(:,1:S,:,:);
+            noisy_unified_xi = alpha_true .* mi .* sensor_signal(t-t0_true) + scaled_w(:,1:S,:,:);
             
             %%% debugging
             % if save_xi_check
@@ -234,7 +233,6 @@ for agent_db_idx = 1:length(agent_db_values)
                     elseif scheme == "NPC"
                         ci = gi;
                         gamma_n = dt * P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
-                        % gamma_n = 0;
                     end
 
                     % Apply dropout (by setting dropout sensor channels to zero).
@@ -251,7 +249,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     scaled_n = sqrt( (gamma_n*n_psd_constant/dt) / 2 ) * n;
                     % Define psd function of n in time domain (td).
                     % n_psd_function_td = gamma_n/dt;
-                    scaled_n_psd_constant = gamma_n * n_psd_constant;
+                    scaled_n_psd_constant = gamma_n * n_psd_constant; % == N0/2
 
                     scaled_vi_psd_constant = (abs(ci).^2 * scaled_w_psd_constant + scaled_n_psd_constant/2);
 
@@ -265,21 +263,18 @@ for agent_db_idx = 1:length(agent_db_values)
                     %% Estimate t0
                     if contains(experiment, "omx")
                         yi_omx = ci .* xi + scaled_n(:,1:S,:,:);
+                        yi_omx_tr = pagetranspose(yi_omx);
                         unified_yi = ci .* noisy_unified_xi + scaled_n(:,1:S,:,:);
                         
                         if scheme == "MPC" || scheme == "EPC"
-                            % cws_omx = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(channel_gains .* mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), 1 ./ scaled_vi_psd_constant, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                            % cws_omx = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(ci .* mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), 1 ./ scaled_vi_psd_constant, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
                             % cws_searchable = cws_omx(:,1:(floor(t0_max/dt) + 1),:,:);
 
                             %%% convolution using FFT checks different offsets for me so I don't have to do it manually
-                            [cws_2, ~] = mf_integral_fft(real(unified_yi), ci .* mi .* sensor_signal(t-tpi), 1 ./ scaled_vi_psd_constant, 1, K, dt, Tp);
+                            [cws_omx, ~] = mf_integral_fft(real(unified_yi), ci .* mi .* sensor_signal(t-tpi), 1 ./ scaled_vi_psd_constant, 1, K, dt, Tp);
+                            cws_searchable = cws_omx(1:(floor(t0_max/dt) + 1),:,:,:);
                             
-                            % cws = pagetranspose(cws_2);
-                            % cws_searchable = cws(:,1:(floor(t0_max/dt) + 1),:,:);
-                            % [~,I] = max(abs(cws_searchable));
-
-                            cws_searchable = cws_2(1:(floor(t0_max/dt) + 1),:,:,:);
-                            [~,I] = max(abs(cws_searchable));
+                            [~,I] = max(cws_searchable);
                         
                         elseif scheme == "PPC" || scheme == "NPC"
                             real_channel = real(ci);
@@ -299,7 +294,7 @@ for agent_db_idx = 1:length(agent_db_values)
                                 cR = real_channel(:,i,:,:);
                                 cI = imag_channel(:,i,:,:);
                                 a = a_select(:,i,:,:);
-                                yi = pagetranspose(yi_omx(:,i,:,:));
+                                yi = yi_omx_tr(i,:,:,:); % pagetranspose(yi_omx(:,i,:,:));
                                 
                                 % Define magnitude squared of SHdI.
                                 mag_sqr_SHdI = ones(1,K,1,nDeployments);
@@ -349,17 +344,27 @@ for agent_db_idx = 1:length(agent_db_values)
                                 
                                 aaaR = real(aaa);
                                 aaaI = imag(aaa);
+
+                                hdR_matrix_resh = reshape(hdR_matrix,K,K,1,1,nDeployments);
+                                hdI_matrix_resh = reshape(hdI_matrix,K,K,1,1,nDeployments);
         
                                 % The d here is for decorrelation, not derivative.
-                                aaadR = dt*(pagemtimes(aaaR,reshape(hdR_matrix,K,K,1,1,nDeployments)) - pagemtimes(aaaI,reshape(hdI_matrix,K,K,1,1,nDeployments)));
-                                aaadI = dt*(pagemtimes(aaaI,reshape(hdR_matrix,K,K,1,1,nDeployments)) + pagemtimes(aaaR,reshape(hdI_matrix,K,K,1,1,nDeployments)));
+                                % aaadR = dt*(pagemtimes(aaaR,reshape(hdR_matrix,K,K,1,1,nDeployments)) - pagemtimes(aaaI,reshape(hdI_matrix,K,K,1,1,nDeployments)));
+                                % aaadI = dt*(pagemtimes(aaaI,reshape(hdR_matrix,K,K,1,1,nDeployments)) + pagemtimes(aaaR,reshape(hdI_matrix,K,K,1,1,nDeployments)));
+
+                                aaadR = dt*(pagemtimes(aaaR,hdR_matrix_resh) - pagemtimes(aaaI,hdI_matrix_resh));
+                                aaadI = dt*(pagemtimes(aaaI,hdR_matrix_resh) + pagemtimes(aaaR,hdI_matrix_resh));
         
-                                yiR = real(yi);
-                                yiI = imag(yi);
-            
-                                yidR = dt*(pagemtimes(yiR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(yiI,reshape(hdI_matrix,K,K,1,nDeployments)));
-                                yidI = dt*(pagemtimes(yiI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(yiR,reshape(hdI_matrix,K,K,1,nDeployments)));
-        
+                                % yiR = real(yi);
+                                % yiI = imag(yi);
+                                % yidR = dt*(pagemtimes(yiR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(yiI,reshape(hdI_matrix,K,K,1,nDeployments)));
+                                % yidI = dt*(pagemtimes(yiI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(yiR,reshape(hdI_matrix,K,K,1,nDeployments)));
+
+                                Hc = reshape(hdR_matrix + 1j*hdI_matrix, K, K, 1, nDeployments);
+                                yid = dt * pagemtimes(yi, Hc);
+                                yidR = real(yid);
+                                yidI = imag(yid);
+
                                 resh_QnR_matrix = reshape(QnR_matrix,length(t),length(t),1,nDeployments);
                                 resh_QnI_matrix = reshape(QnI_matrix,length(t),length(t),1,nDeployments);
         
@@ -611,7 +616,7 @@ for agent_db_idx = 1:length(agent_db_values)
                             hdR_matrix = reshape(a_select,1,1,nDeployments) .* hdI_matrix;
 
                             % Create time domain matrix for hd.
-                            hd_matrix = hdR_matrix + 1i*hdI_matrix;
+                            % hd_matrix = hdR_matrix + 1i*hdI_matrix;
 
                             % Compute pR and qR.
                             pR = scaled_w_psd_constant * sum(mi.^2 .* (a_select.*real_channel - imag_channel).^2, 2);
@@ -833,13 +838,13 @@ else
 end
 
 %% Save experiment results.
-% if ~any(experiment == experiment_list)
-%     error("Unknown experiment specified. Results not saved!")
-% else
-%     save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
-%         "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
-%         "experiment","sensor_dimension")
-% end
+if ~any(experiment == experiment_list)
+    error("Unknown experiment specified. Results not saved!")
+else
+    save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
+        "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
+        "experiment","sensor_dimension")
+end
 
 %% Plotting
 params_latex = ["\alpha","t_0"];
@@ -849,203 +854,217 @@ color_vec = ["#A2142F", "#0072BD", "#333333"];
 home_dir = char(java.lang.System.getProperty('user.home'));
 folder_path = home_dir + "\Desktop\Updated Final AirComp Results\";
 
-% Linear plots
-if experiment ~= "cwe_joint_grid"
-    for agent_db_idx = 1:length(agent_db_values)
+% if experiment == "random_dropout" || experiment == "cwe_disjoint_grid"
+%     plots = true;
+% else
+%     plots = false;
+% end
+plots = true;
+save_figs = false;
+
+if plots
+    % Linear plots
+    if experiment ~= "cwe_joint_grid"
+        for agent_db_idx = 1:length(agent_db_values)
+            % Create save directory if it does not exist.
+            save_folder = folder_path + experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db";
+            if ~exist(save_folder, 'dir')
+                mkdir(save_folder);
+            end
+        
+            for param_idx = 1:2
+                % Collect all plot values for y-axis scaling.
+                all_vals = [avg_dep_var(:,agent_db_idx,:,param_idx,:,1:sensor_dimension);...
+                            avg_dep_mse(:,agent_db_idx,:,param_idx,:,1:sensor_dimension);...
+                            avg_dep_crlb(:,agent_db_idx,:,param_idx,:,1:sensor_dimension)];
+                for scheme_idx = 1:length(selected_schemes)
+                    scheme = selected_schemes(scheme_idx);
+                    fig1 = figure;
+                    set(fig1,'Position',[100,100,450,450])
+                    ax = gca;
+                    hold on
+                    
+                    % Plot pseudoplots for legend symbols.
+                    if experiment == "random_dropout"
+                        for dropout_idx = 1:length(dropout_vals)
+                            plot(nan,nan,'color',color_vec(dropout_idx),'LineWidth',2);
+                        end
+                    else
+                        for sensor_idx = 1:length(sensor_vals) 
+                            plot(nan,nan,'color',color_vec(sensor_idx),'LineWidth',2);
+                        end
+                    end
+                    plot(nan,nan,'^','color','black');
+                    plot(nan,nan,'x','color','black');
+                    plot(nan,nan,'o','color','black');
+    
+                    x_axis_series = channel_db_values(scheme_idx,:,agent_db_idx);
+                    
+                    if experiment == "random_dropout"
+                        count_vals = dropout_vals;
+                    else
+                        count_vals = sensor_vals;
+                    end
+    
+                    if scheme == "NPC"
+                        count_vals = count_vals(1);
+                    end
+    
+                    for count_idx = 1:length(count_vals)
+                        plot(x_axis_series,(squeeze(avg_dep_var(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-^','color',color_vec(count_idx),'LineWidth', 1)
+                        plot(x_axis_series,(squeeze(avg_dep_mse(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-x','color',color_vec(count_idx),'LineWidth', 1)
+                        plot(x_axis_series,(squeeze(avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx),'LineWidth', 1)
+                    end
+    
+                    xlabel('Channel SNR (dB)')
+                    ylabel(" ")
+        
+                    title('$$\hat{'+params_latex(param_idx)+'}$$','Interpreter','latex')
+                    
+                    set(ax, 'FontSize', 15);
+                    set(ax, 'YScale', 'log')
+    
+                    if scheme == "MPC"
+                        if experiment == "random_dropout"
+                            legend(["Drop = " + dropout_vals,"VAR","MSE","CRLB"], 'Location', 'best')
+                        else
+                            legend(["S = " + sensor_vals,"VAR","MSE","CRLB"], 'Location', 'best')
+                        end
+                    end
+                    
+                    % Add box around plot axes.
+                    box(ax, 'on');
+                    grid on
+    
+                    y_lower = 10^(-0.25)*min(all_vals,[],"all");
+                    y_upper = 1.05*max(all_vals,[],"all");
+                    ylim([y_lower,y_upper]);
+                    y_ticks = power_10_range(y_lower,y_upper);
+    
+                    % Don't plot for certain combinations due to axis and box
+                    % overlap
+                    if param_idx == 1
+                            y_ticks = y_ticks(2:end);
+                    end
+    
+                    ax.YTick = y_ticks;
+                    ax.GridColor = [0 0 0];
+                    ax.GridAlpha = 0.5;
+                    ax.LineWidth = 1;
+    
+                    % Save the figure.
+                    if save_figs
+                        exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
+                    end
+                    % close(fig1)
+                end
+            end
+        end
+    % Surface plots
+    else
         % Create save directory if it does not exist.
-        save_folder = folder_path + experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db";
+        save_folder = folder_path + experiment + "_" + string(agent_db_values(end)) + "_db";
         if ~exist(save_folder, 'dir')
             mkdir(save_folder);
         end
     
+        % Toggle if you want to convert meshgrid values to log (you should).
+        convert_to_log = true;
+    
         for param_idx = 1:2
             % Collect all plot values for y-axis scaling.
-            all_vals = [avg_dep_var(:,agent_db_idx,:,param_idx,:,1:sensor_dimension);...
-                        avg_dep_mse(:,agent_db_idx,:,param_idx,:,1:sensor_dimension);...
-                        avg_dep_crlb(:,agent_db_idx,:,param_idx,:,1:sensor_dimension)];
-            for scheme_idx = 1:length(selected_schemes)
-                scheme = selected_schemes(scheme_idx);
-                fig1 = figure;
-                set(fig1,'Position',[100,100,450,450])
-                ax = gca;
-                hold on
-                
-                % Plot pseudoplots for legend symbols.
-                if experiment == "random_dropout"
-                    for dropout_idx = 1:length(dropout_vals)
-                        plot(nan,nan,'color',color_vec(dropout_idx),'LineWidth',2);
-                    end
-                else
-                    for sensor_idx = 1:length(sensor_vals) 
-                        plot(nan,nan,'color',color_vec(sensor_idx),'LineWidth',2);
-                    end
-                end
-                plot(nan,nan,'^','color','black');
-                plot(nan,nan,'x','color','black');
-                plot(nan,nan,'o','color','black');
-
-                x_axis_series = channel_db_values(scheme_idx,:,agent_db_idx);
-                
-                if experiment == "random_dropout"
-                    count_vals = dropout_vals;
-                else
-                    count_vals = sensor_vals;
-                end
-
-                if scheme == "NPC"
-                    count_vals = count_vals(1);
-                end
-
-                for count_idx = 1:length(count_vals)
-                    plot(x_axis_series,(squeeze(avg_dep_var(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-^','color',color_vec(count_idx),'LineWidth', 1)
-                    plot(x_axis_series,(squeeze(avg_dep_mse(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'-x','color',color_vec(count_idx),'LineWidth', 1)
-                    plot(x_axis_series,(squeeze(avg_dep_crlb(:,agent_db_idx,:,param_idx,scheme_idx,count_idx,1))),'--o','color',color_vec(count_idx),'LineWidth', 1)
-                end
-
-                xlabel('Channel SNR (dB)')
-                ylabel(" ")
+            all_vals = [avg_dep_var(:,:,:,param_idx,:,1:sensor_dimension);...
+                        avg_dep_mse(:,:,:,param_idx,:,1:sensor_dimension);...
+                        avg_dep_crlb(:,:,:,param_idx,:,1:sensor_dimension)];
+            if convert_to_log
+                all_vals = log10(all_vals);
+            end
     
-                title('$$\hat{'+params_latex(param_idx)+'}$$','Interpreter','latex')
-                
-                set(ax, 'FontSize', 15);
-                set(ax, 'YScale', 'log')
-
-                if scheme == "MPC"
-                    if experiment == "random_dropout"
-                        legend(["Drop = " + dropout_vals,"VAR","MSE","CRLB"], 'Location', 'best')
-                    else
-                        legend(["S = " + sensor_vals,"VAR","MSE","CRLB"], 'Location', 'best')
+            for scheme_idx = 1:length(selected_schemes)
+                fig1 = figure;
+                set(fig1,'Position',[100,100,675,475])
+                ax = gca;
+    
+                count_vals = sensor_vals;
+    
+                for count_idx = 1:length(count_vals)
+                    z_vals = squeeze(avg_dep_var(:,:,:,param_idx,scheme_idx,count_idx,1));
+                    if convert_to_log
+                        z_vals = log10(z_vals);
                     end
+                    surf(agent_db_values, channel_db_values(1,:,1), z_vals)
                 end
+    
+                cb = colorbar;
+                colormap(turbo)
+                % Change view angle to better see both x and y dimensions
+                view(150,20)
+                xl = xlabel('Channel SNR (dB)', 'FontWeight', 'bold');
+                yl = ylabel('Sensor SNR (dB)', 'FontWeight', 'bold');
+                
+               
+                title('$$\hat{' + params_latex(param_idx) + '}$$', 'Interpreter','latex')
+                set(ax, 'FontSize', 15);
+    
+                zlabel('$$ \mathbf{\log_{10} ((\mathrm{Var} ( \hat{'+params_latex(param_idx)+'} ))}$$','Interpreter','latex', 'FontSize', 20)
                 
                 % Add box around plot axes.
                 box(ax, 'on');
                 grid on
-
-                y_lower = 10^(-0.25)*min(all_vals,[],"all");
-                y_upper = 1.05*max(all_vals,[],"all");
-                ylim([y_lower,y_upper]);
-                y_ticks = power_10_range(y_lower,y_upper);
-
-                % Don't plot for certain combinations due to axis and box
-                % overlap
-                if param_idx == 1
-                        y_ticks = y_ticks(2:end);
+                
+                if convert_to_log
+                    z_lower = 1.05*min(all_vals,[],"all");
+                else
+                    set(ax, 'ZScale', 'log')
+                    z_lower = 10^(-0.25)*min(all_vals,[],"all");
                 end
-
-                ax.YTick = y_ticks;
+    
+                z_upper = 1.05*max(all_vals,[],"all");
+                
+                zlim([z_lower,z_upper]);
+                clim([z_lower,z_upper])
+    
+                if ~convert_to_log
+                    z_ticks = power_10_range(z_lower,z_upper);
+                    ax.ZTick = z_ticks;
+                end
+    
                 ax.GridColor = [0 0 0];
-                ax.GridAlpha = 0.5;
+                ax.GridAlpha = 1;
                 ax.LineWidth = 1;
-
+    
+                xpos = get(ax, 'Xlabel');
+                xpos = xpos.Position;
+                xpos(1) = xpos(1) + 2;
+                xpos(2) = xpos(2) - 2;
+                
+                xl.Position = xpos;
+                xl.Rotation = 10;
+    
+                ypos = get(ax, 'Ylabel');
+                ypos = ypos.Position;
+                ypos(1) = ypos(1) - 2;
+                ypos(2) = ypos(2) + 2.5;
+    
+                % if scheme_idx == 1
+                %     ypos(1) = ypos(1) - 5.5;
+                %     ypos(2) = ypos(2) - 2.5;
+                % else
+                %     ypos(1) = ypos(1) - 4.5;
+                %     ypos(2) = ypos(2) - 2.5;
+                % end
+    
+                yl.Position = ypos;
+                yl.Rotation = -30;
+    
+                axis normal
+    
                 % Save the figure.
-                exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
+                if save_figs
+                    exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(end)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
+                end
                 % close(fig1)
             end
-        end
-    end
-% Surface plots
-else
-    % Create save directory if it does not exist.
-    save_folder = folder_path + experiment + "_" + string(agent_db_values(end)) + "_db";
-    if ~exist(save_folder, 'dir')
-        mkdir(save_folder);
-    end
-
-    % Toggle if you want to convert meshgrid values to log (you should).
-    convert_to_log = true;
-
-    for param_idx = 1:2
-        % Collect all plot values for y-axis scaling.
-        all_vals = [avg_dep_var(:,:,:,param_idx,:,1:sensor_dimension);...
-                    avg_dep_mse(:,:,:,param_idx,:,1:sensor_dimension);...
-                    avg_dep_crlb(:,:,:,param_idx,:,1:sensor_dimension)];
-        if convert_to_log
-            all_vals = log10(all_vals);
-        end
-
-        for scheme_idx = 1:length(selected_schemes)
-            fig1 = figure;
-            set(fig1,'Position',[100,100,675,475])
-            ax = gca;
-
-            count_vals = sensor_vals;
-
-            for count_idx = 1:length(count_vals)
-                z_vals = squeeze(avg_dep_var(:,:,:,param_idx,scheme_idx,count_idx,1));
-                if convert_to_log
-                    z_vals = log10(z_vals);
-                end
-                surf(agent_db_values, channel_db_values(1,:,1), z_vals)
-            end
-
-            cb = colorbar;
-            colormap(turbo)
-            % Change view angle to better see both x and y dimensions
-            view(150,20)
-            xl = xlabel('Channel SNR (dB)', 'FontWeight', 'bold');
-            yl = ylabel('Sensor SNR (dB)', 'FontWeight', 'bold');
-            
-           
-            title('$$\hat{' + params_latex(param_idx) + '}$$', 'Interpreter','latex')
-            set(ax, 'FontSize', 15);
-
-            zlabel('$$ \mathbf{\log_{10} ((\mathrm{Var} ( \hat{'+params_latex(param_idx)+'} ))}$$','Interpreter','latex', 'FontSize', 20)
-            
-            % Add box around plot axes.
-            box(ax, 'on');
-            grid on
-            
-            if convert_to_log
-                z_lower = 1.05*min(all_vals,[],"all");
-            else
-                set(ax, 'ZScale', 'log')
-                z_lower = 10^(-0.25)*min(all_vals,[],"all");
-            end
-
-            z_upper = 1.05*max(all_vals,[],"all");
-            
-            zlim([z_lower,z_upper]);
-            clim([z_lower,z_upper])
-
-            if ~convert_to_log
-                z_ticks = power_10_range(z_lower,z_upper);
-                ax.ZTick = z_ticks;
-            end
-
-            ax.GridColor = [0 0 0];
-            ax.GridAlpha = 1;
-            ax.LineWidth = 1;
-
-            xpos = get(ax, 'Xlabel');
-            xpos = xpos.Position;
-            xpos(1) = xpos(1) + 2;
-            xpos(2) = xpos(2) - 2;
-            
-            xl.Position = xpos;
-            xl.Rotation = 10;
-
-            ypos = get(ax, 'Ylabel');
-            ypos = ypos.Position;
-            ypos(1) = ypos(1) - 2;
-            ypos(2) = ypos(2) + 2.5;
-
-            % if scheme_idx == 1
-            %     ypos(1) = ypos(1) - 5.5;
-            %     ypos(2) = ypos(2) - 2.5;
-            % else
-            %     ypos(1) = ypos(1) - 4.5;
-            %     ypos(2) = ypos(2) - 2.5;
-            % end
-
-            yl.Position = ypos;
-            yl.Rotation = -30;
-
-            axis normal
-
-            % Save the figure.
-            exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(end)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
-            % close(fig1)
         end
     end
 end
