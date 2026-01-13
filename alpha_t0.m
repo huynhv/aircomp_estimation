@@ -2,14 +2,23 @@
 clear all
 close all
 
+
+% Choose which experiment to run.
+% "omx_disjoint", "omx_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi"
+experiment_list = ["omx_disjoint", "omx_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", ...
+                    "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi", "comp_cwe_disjoint"];
+experiment = "omx_disjoint";
+
+msg = ['Running ' char(experiment)];
+border = repmat('─', 1, length(msg)+4);
+
+fprintf('\n╭%s╮\n', border);
+fprintf('│  %s  │\n', msg);
+fprintf('╰%s╯\n\n', border);
+
 % Set a seed for reproducibility.
 seed = 264;
 rng(seed);
-
-% Choose which experiment to run.
-experiment_list = ["orthog_disjoint", "orthog_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi"];
-experiment = "nae_disjoint";
-save_images = false;
 
 % Set number of deployments.
 nDeployments = 100;
@@ -17,7 +26,7 @@ nDeployments = 100;
 nTrials = 500;
 % Set the number of measurements per sensor. The sample index starts at 0 so
 % sampling from index 0 to 100 requires K = 101 measurements.
-K = 201;
+K = 301;
 
 % Set some bookkeeping variables depending on which experiment we are running.
 if experiment == "random_dropout"
@@ -30,8 +39,11 @@ else
     if experiment == "cwe_joint_grid"
         sensor_vals = 5;
         agent_db_values = [0,5,10,15,20];
-    elseif contains(experiment, "orthog")
-        sensor_vals = 3;
+    elseif contains(experiment, "omx")
+        sensor_vals = [6];
+        agent_db_values = 0;
+    elseif contains(experiment, "comp")
+        sensor_vals = [5,6,7];
         agent_db_values = 0;
     else
         sensor_vals = [5,10];
@@ -42,7 +54,7 @@ else
 end
 
 % Parse experiment name for organization.
-exp_split = strsplit(experiment,'_');
+% exp_split = strsplit(experiment,'_');
 
 % Set observation window length in seconds.
 T0 = 5;
@@ -86,12 +98,14 @@ min_tpi = 0;
 % be in the interioir of the observation period.
 t0_max = T0-Tp-max_ti-max_tpi;
 
+%%% Always generate w, n, and channel gain for S = 10, then use subsets for different S trials
+max_sensor_limit = 10;
 % Generate sensor noise with dimensions: K x S x trials x deployments.
-all_w = randn(K,max(sensor_vals),nTrials,nDeployments);
+all_w = randn(K,max_sensor_limit,nTrials,nDeployments);
 % Generate server noise.
-n = (randn(K,max(sensor_vals),nTrials,nDeployments) + 1i*randn(K,max(sensor_vals),nTrials,nDeployments));
+n = (randn(K,max_sensor_limit,nTrials,nDeployments) + 1i*randn(K,max_sensor_limit,nTrials,nDeployments));
 % Generate channel gains.
-all_gi = (randn(1,max(sensor_vals),1,nDeployments) + 1i*randn(1,max(sensor_vals),1,nDeployments))/sqrt(2);
+all_gi = (randn(1,max_sensor_limit,1,nDeployments) + 1i*randn(1,max_sensor_limit,1,nDeployments))/sqrt(2);
 
 % Define Rayleigh distribution parameters.
 rayleigh_factor = 1/sqrt(2);
@@ -209,39 +223,37 @@ for agent_db_idx = 1:length(agent_db_values)
 
                     % Define channel gains and server noise power.
                     if scheme == "MPC"
-                        channel_gains = ones(size(gi));
+                        ci = ones(size(gi));
                         gamma_n = dt * P_s * E_mi_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
                     elseif scheme == "EPC"
-                        channel_gains = abs(gi);
+                        ci = abs(gi);
                         gamma_n = dt * P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
                     elseif scheme == "PPC"
-                        channel_gains = qgi;
+                        ci = qgi;
                         gamma_n = dt * P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
                     elseif scheme == "NPC"
-                        channel_gains = gi;
+                        ci = gi;
                         gamma_n = dt * P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
                         % gamma_n = 0;
                     end
 
-                    % Apply dropout (by setting dropout sensor channels to
-                    % zero).
+                    % Apply dropout (by setting dropout sensor channels to zero).
                     if num_dropout > 0
                         dropout_elements = which_dropout(:,1:num_dropout);
                         for item = 1:nDeployments
-                            channel_gains(1,dropout_elements(item,:),1,item) = 0;
-                            % mi(1,dropout_elements(item,:),1,item) = 0;
+                            ci(1,dropout_elements(item,:),1,item) = 0;
                         end
                     end
-    
+
+                    n_psd_constant = 1;
                     % Set server noise power. Note the factor of 1/dt which is
                     % equivalent to applying an anti-aliasing filter.
-                    n_psd_constant = 1;
                     scaled_n = sqrt( (gamma_n*n_psd_constant/dt) / 2 ) * n;
                     % Define psd function of n in time domain (td).
                     % n_psd_function_td = gamma_n/dt;
                     scaled_n_psd_constant = gamma_n * n_psd_constant;
 
-                    scaled_vi_psd_constant = (abs(channel_gains).^2 * scaled_w_psd_constant + scaled_n_psd_constant/2);
+                    scaled_vi_psd_constant = (abs(ci).^2 * scaled_w_psd_constant + scaled_n_psd_constant/2);
 
                     %%%%%%%%%%%%%%%%% ESTIMATION %%%%%%%%%%%%%%%%%
                     % Search for t0 from index 1 to index of t0_max/dt + 1.
@@ -251,24 +263,27 @@ for agent_db_idx = 1:length(agent_db_values)
                     % alpha = 0/0, which will result in NaN.
 
                     %% Estimate t0
-                    if contains(experiment, "orthog")
-                        yi_orthog = channel_gains .* xi + scaled_n(:,1:S,:,:);
-                        unified_yi = channel_gains .* noisy_unified_xi + scaled_n(:,1:S,:,:);
+                    if contains(experiment, "omx")
+                        yi_omx = ci .* xi + scaled_n(:,1:S,:,:);
+                        unified_yi = ci .* noisy_unified_xi + scaled_n(:,1:S,:,:);
                         
                         if scheme == "MPC" || scheme == "EPC"
-                            % cws_orthog = reshape(matched_filter_integral(reshape(real(yi_orthog),K,S,1,nTrials,nDeployments), reshape(channel_gains .* mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), 1 ./ scaled_vi_psd_constant, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
-                            % cws_searchable = cws_orthog(:,1:(floor(t0_max/dt) + 1),:,:);
+                            % cws_omx = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(channel_gains .* mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), 1 ./ scaled_vi_psd_constant, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                            % cws_searchable = cws_omx(:,1:(floor(t0_max/dt) + 1),:,:);
 
                             %%% convolution using FFT checks different offsets for me so I don't have to do it manually
-                            [cws_2, ~] = mf_integral_fft(real(unified_yi), channel_gains .* mi .* sensor_signal(t-tpi), 1 ./ scaled_vi_psd_constant, 1, K, dt, Tp);
-                            cws = pagetranspose(cws_2);
-                            cws_searchable = cws(:,1:(floor(t0_max/dt) + 1),:,:);
+                            [cws_2, ~] = mf_integral_fft(real(unified_yi), ci .* mi .* sensor_signal(t-tpi), 1 ./ scaled_vi_psd_constant, 1, K, dt, Tp);
                             
-                            [~,I] = max(abs(real(cws_searchable)));
+                            % cws = pagetranspose(cws_2);
+                            % cws_searchable = cws(:,1:(floor(t0_max/dt) + 1),:,:);
+                            % [~,I] = max(abs(cws_searchable));
+
+                            cws_searchable = cws_2(1:(floor(t0_max/dt) + 1),:,:,:);
+                            [~,I] = max(abs(cws_searchable));
                         
                         elseif scheme == "PPC" || scheme == "NPC"
-                            real_channel = real(channel_gains);
-                            imag_channel = imag(channel_gains);
+                            real_channel = real(ci);
+                            imag_channel = imag(ci);
         
                             % Compute polynomial to find coefficients for
                             % decorrelation filter. 
@@ -284,7 +299,7 @@ for agent_db_idx = 1:length(agent_db_values)
                                 cR = real_channel(:,i,:,:);
                                 cI = imag_channel(:,i,:,:);
                                 a = a_select(:,i,:,:);
-                                yi = pagetranspose(yi_orthog(:,i,:,:));
+                                yi = pagetranspose(yi_omx(:,i,:,:));
                                 
                                 % Define magnitude squared of SHdI.
                                 mag_sqr_SHdI = ones(1,K,1,nDeployments);
@@ -363,41 +378,42 @@ for agent_db_idx = 1:length(agent_db_values)
                         % y = cws + pagetranspose(scaled_n(:,1,:,:));
                         % y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
 
-                        [cws_2, ~] = mf_integral_fft(noisy_unified_xi, mi .* sensor_signal(t-tpi), channel_gains, 1, K, dt, Tp);
+                        [cws_2, ~] = mf_integral_fft(noisy_unified_xi, mi .* sensor_signal(t-tpi), ci, 1, K, dt, Tp);
                         y = pagetranspose(cws_2) + pagetranspose(scaled_n(:,1,:,:));
-                        y_searchable = cws(:,1:(floor(t0_max/dt) + 1),:,:);
+                        y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
 
-                        if exp_split(1) == "nae" || scheme == "MPC" || scheme == "EPC"
+                        if contains(experiment, "nae") || scheme == "MPC" || scheme == "EPC"
                             [~,I] = max(abs(real(y_searchable)));
                         else
                             [~,I] = max(abs(y_searchable));
                         end
                     end
                     t0_estimates_for_plot = (I-1)*dt;
-                    
                     % Set t0 estimates to true or estimated values depending on
                     % experiment.
-                    if experiment == "cwe_disjoint" || experiment == "nae_disjoint" || experiment == "orthog_disjoint"
+                    if contains(experiment, "_disjoint") % experiment == "cwe_disjoint" || experiment == "nae_disjoint" || experiment == "omx_disjoint"
                         t0_estimates = t0_true*ones(1,1,nTrials,nDeployments);
+                        I_for_alpha = ((t0_true/dt)+1)*ones(1,1,nTrials,nDeployments);
                     else
                         t0_estimates = t0_estimates_for_plot;
+                        I_for_alpha = I;
                     end
                     
                     %% Estimate alpha
-                    if contains(experiment, "orthog")
-                        
+                    if contains(experiment, "omx")
                         if scheme == "MPC" || scheme == "EPC"
-                            num_accum = reshape(matched_filter_integral(reshape(real(yi_orthog),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-t0_estimates),K,S,1,nTrials,nDeployments), channel_gains ./ scaled_vi_psd_constant, 1, S, nTrials, nDeployments, dt),1,1,nTrials,nDeployments);
-                            denom_accum = sum(abs(channel_gains).^2 ./ scaled_vi_psd_constant .* Ei,2);
+                            % num_accum = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-t0_estimates),K,S,1,nTrials,nDeployments), ci ./ scaled_vi_psd_constant, 1, S, nTrials, nDeployments, dt),1,1,nTrials,nDeployments);
+                            num_accum = sum(sum(real(yi_omx) .* mi .* sensor_signal(t-ti-tpi-t0_estimates), 1)*dt .* (ci ./ scaled_vi_psd_constant), 2);
+                            denom_accum = sum(abs(ci).^2 ./ scaled_vi_psd_constant .* Ei,2);
                         
                         elseif scheme == "PPC" || scheme == "NPC"
                             %% also compute CRLB in here
-                            real_channel = real(channel_gains);
-                            imag_channel = imag(channel_gains);
+                            real_channel = real(ci);
+                            imag_channel = imag(ci);
 
-                            dsalpha = channel_gains .* mi .* sensor_signal(t-ti-t0_true);
+                            dsalpha = ci .* mi .* sensor_signal(t-ti-t0_true);
                             temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-Tp)) + sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-Tp));
-                            dst0 = channel_gains .* alpha_true .* mi .* temp;
+                            dst0 = ci .* alpha_true .* mi .* temp;
 
                             fisher_alpha_accum = 0;
                             fisher_t0_accum = 0;
@@ -418,7 +434,7 @@ for agent_db_idx = 1:length(agent_db_values)
                                 cR = real_channel(:,i,:,:);
                                 cI = imag_channel(:,i,:,:);
                                 a = a_select(:,i,:,:);
-                                yi = pagetranspose(yi_orthog(:,i,:,:));
+                                yi = pagetranspose(yi_omx(:,i,:,:));
                                 
                                 % Define magnitude squared of SHdI.
                                 mag_sqr_SHdI = ones(1,K,1,nDeployments);
@@ -511,14 +527,14 @@ for agent_db_idx = 1:length(agent_db_values)
                                             (pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_t0)))...
                                             (pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)))];
 
-                                fisher_alpha_accum = fisher_alpha_accum + dt*dt*(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)));
-                                fisher_t0_accum = fisher_t0_accum + dt*dt*(pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)));
+                                % fisher_alpha_accum = fisher_alpha_accum + dt*dt*(pagemtimes(pagemtimes(dsdR_alpha,QnR_matrix),pagetranspose(dsdR_alpha)) + pagemtimes(pagemtimes(dsdI_alpha,QnI_matrix),pagetranspose(dsdI_alpha)));
+                                % fisher_t0_accum = fisher_t0_accum + dt*dt*(pagemtimes(pagemtimes(dsdR_t0,QnR_matrix),pagetranspose(dsdR_t0)) + pagemtimes(pagemtimes(dsdI_t0,QnI_matrix),pagetranspose(dsdI_t0)));
                             end
                         end
                         alpha_estimates = num_accum ./ denom_accum;
                     % Compute alpha estimates for AC-NAE
                     elseif contains(experiment, "nae")
-                        if exp_split(2) == "joint"
+                        if contains(experiment, "_joint")
                             % Select estimated peak index in vectorized manner.
                             II = squeeze(I);
                             % Generate the subscript indices for the 3rd and 4th
@@ -531,28 +547,31 @@ for agent_db_idx = 1:length(agent_db_values)
                             % Extract the elements from y.
                             peak_y_vals = y(linear_indices);
                             peak_y_vals = reshape(peak_y_vals,size(I));
-                        elseif exp_split(2) == "disjoint"
+                        elseif contains(experiment, "_disjoint")
                             % Compute y(t0). We have the index of what we think
                             % is the peak value of y (where all the matched
                             % filter peaks should line up).
-                            t0_cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-repmat(t0_true,1,1,K)), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
-                            % All column idx in t0_cws are the same currently,
-                            % hence 2nd idx = 1.
-                            peak_y_vals =  t0_cws(:,1,:,:) + pagetranspose(scaled_n(1,1,:,:));
+                            % t0_cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-repmat(t0_true,1,1,K)), K,S,K,1,nDeployments), ci, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                            % All column idx in t0_cws are the same currently hence 2nd idx = 1.
+                            % peak_y_vals =  t0_cws(:,1,:,:) + pagetranspose(scaled_n(1,1,:,:));
+                            
+                            [t0_cws, ~] = mf_integral_fft(noisy_unified_xi, mi .* sensor_signal(t), ci, 1, K, dt, Tp);
+                            peak_y_vals =  t0_cws((t0_true/dt)+1,:,:,:) + pagetranspose(scaled_n(1,1,:,:));
+                            
                         end
                         % compute alpha estimates
-                        alpha_estimates =  real(peak_y_vals) ./ sum(real(channel_gains) .* Ei,2);
+                        alpha_estimates =  real(peak_y_vals) ./ sum(real(ci) .* Ei,2);
 
                     % Compute alpha for AC-CWE.
-                    elseif exp_split(1) ~= "nae"
+                    else
                         % Check if there are any indeterminate values (will
                         % depend on the form of si(t) but in this case we
                         % calculated this ahead of time).
                         indet_idx = find(abs(round(f,4)) == 0.5);
     
                         if (scheme == "PPC" || scheme == "NPC")
-                            real_channel = real(channel_gains);
-                            imag_channel = imag(channel_gains);
+                            real_channel = real(ci);
+                            imag_channel = imag(ci);
         
                             % Compute polynomial to find coefficients for
                             % decorrelation filter. 
@@ -627,8 +646,11 @@ for agent_db_idx = 1:length(agent_db_values)
                             % aaa represents sum gi int si(tau - t0_estimates)
                             % si(tau-t) dtau, where each trial will have a
                             % different t0 estimate.
-                            aaa = reshape(matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
+                            % aaa = reshape(matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
     
+                            [aaa, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
+                            
+                            aaa = pagetranspose(aaa);
                             aaaR = real(aaa);
                             aaaI = imag(aaa);
     
@@ -655,7 +677,7 @@ for agent_db_idx = 1:length(agent_db_values)
                         % Compute AC-CWE estimates for full phase compensation.
                         else
                             % Define coefficients in V(w).
-                            Beta = 2 * pi^2 * sum(channel_gains.^2 .* mi.^2,2);
+                            Beta = 2 * pi^2 * sum(ci.^2 .* mi.^2,2);
                             C1 = Beta .* scaled_w_psd_constant;
                             C2 = scaled_n_psd_constant/2;
     
@@ -674,8 +696,9 @@ for agent_db_idx = 1:length(agent_db_values)
                             end
     
                             % Get time domain matrix for Qn.
-                            [~,Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments);
-                            Omega = matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt);
+                            [~, Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments);
+                            % Omega = matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))), K,S,K,1,nDeployments), ci, K, S, nTrials, nDeployments, dt);
+                            [Omega, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
                         
                             num = dt*dt*pagemtimes(pagemtimes(real(y),reshape(Qn_matrix,length(t),length(t),1,nDeployments)),pagetranspose(reshape(Omega,1,length(t),nTrials,nDeployments)));
                             denom = dt*dt*pagemtimes(pagemtimes(reshape(Omega,1,length(t),nTrials,nDeployments),reshape(Qn_matrix,length(t),length(t),1,nDeployments)),pagetranspose(reshape(Omega,1,length(t),nTrials,nDeployments)));
@@ -703,14 +726,14 @@ for agent_db_idx = 1:length(agent_db_values)
     
                     %%%%%%%%%%%%%%%%% CRLB %%%%%%%%%%%%%%%%%
                     % Compute CRLBs for AC-NAE
-                    if contains(experiment, "orthog")
+                    if contains(experiment, "omx")
                         if scheme == "MPC" || scheme == "EPC"
                             %%% ORTHOG MPC AND EPC %%%
                             % CRLB for alpha
-                            crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = 1./sum(abs(channel_gains).^2 ./ scaled_vi_psd_constant .* Ei,2);
+                            crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = 1./sum(abs(ci).^2 ./ scaled_vi_psd_constant .* Ei,2);
                             % CRLB for t0
                             temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-Tp)) + sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-Tp));
-                            crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = 1 ./ sum(sum((alpha_true .* channel_gains .* mi .* temp).^2 * dt,1)./ scaled_vi_psd_constant , 2);
+                            crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = 1 ./ sum(sum((alpha_true .* ci .* mi .* temp).^2 * dt,1)./ scaled_vi_psd_constant , 2);
                         elseif scheme == "PPC" || scheme == "NPC"
                             %%% ORTHOG PPC AND NPC %%%
                             inv_zz_accum = pageinv(fisher_matrix_accum);
@@ -720,7 +743,7 @@ for agent_db_idx = 1:length(agent_db_values)
                             crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = inv_zz_accum(2,2,:);
                         end
                             
-                    elseif exp_split(1) == "nae"
+                    elseif contains(experiment, "nae")
                         % CRLB for alpha
                         crlb(1,agent_db_idx,channel_db_idx,1,scheme_idx,save_dim,:) = scaled_w_psd_constant / sum(Ei,2);
                         % CRLB for t0
@@ -734,13 +757,17 @@ for agent_db_idx = 1:length(agent_db_values)
                     
                     % Compute AC-CWE CRLBs for partial or no phase compensation
                     % 9/30/2025 - Add random_dropout logic
-                    elseif exp_split(1) == "cwe" || experiment == "random_dropout"
+                    elseif contains(experiment, "cwe") || experiment == "random_dropout"
+                        dsalpha = reshape(squeeze(sum(ci .* sum(mi .* sensor_signal(t-ti-t0_true) .* mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
+                        temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-Tp)) + sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-Tp));
+                        dst0 = reshape(squeeze(sum(ci .* sum(alpha_true .* mi.^2 .* temp .* sensor_signal(t-ti-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
+                        
+                        alpha_objective_array = @(ai) 1./( ((sum(ci .* ai .* mi.^2)).^2 / (2*pi)) .* integral(@(w) (mag_sqr_S0(w)).^2 / V_arr(w,ai), -Inf, Inf, 'ArrayValued', true));
+                        t0_objective_array = @(ai) 1./( (alpha_true^2 .* (sum(ci .* ai .* mi.^2)).^2 / (2*pi)) .* integral(@(w) (w .* mag_sqr_S0(w)).^2 / V_arr(w,ai), -Inf, Inf, 'ArrayValued', true));
+
                         if (scheme == "PPC" || scheme == "NPC")
                             %%% CWE PPC AND NPC %%%
                             % Define derivative expressions for CRLBs.
-                            dsalpha = reshape(squeeze(sum(channel_gains .* sum(mi .* sensor_signal(t-ti-t0_true) .* mi .* sensor_signal(t-ti-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
-                            temp = -w0*cos(w0*(t-ti-t0_true)).*(heaviside(t-ti-t0_true) - heaviside(t-ti-t0_true-Tp)) + sin(w0*(t-ti-t0_true)).*-1.*(dirac(t-ti-t0_true) - dirac(t-ti-t0_true-Tp));
-                            dst0 = reshape(squeeze(sum(channel_gains .* sum(alpha_true .* mi.^2 .* temp .* sensor_signal(t-ti-reshape(t,1,1,length(t))) * dt,1),2)),K,1,nDeployments);
                             
                             % Compute decorrelated derivative expressions for alpha.
                             dsdR_alpha = dt*(pagemtimes(pagetranspose(real(dsalpha)),hdR_matrix) - pagemtimes(pagetranspose(imag(dsalpha)),hdI_matrix));
@@ -766,7 +793,7 @@ for agent_db_idx = 1:length(agent_db_values)
                             crlb(1,agent_db_idx,channel_db_idx,2,scheme_idx,save_dim,:) = inv_zz(2,2,:);
                         
                         % Compute AC-CWE CRLBs for full phase compensation
-                        else
+                        elseif (scheme == "MPC" || scheme == "EPC") 
                             % Compute FIM.
                             fisher_matrix = dt*dt*[pagemtimes(pagemtimes(pagetranspose(dsalpha),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha);...
                                 pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dsalpha), pagemtimes(pagemtimes(pagetranspose(dst0),Qn_matrix),dst0)];
@@ -806,15 +833,15 @@ else
 end
 
 %% Save experiment results.
-if ~any(experiment == experiment_list)
-    error("Unknown experiment specified. Results not saved!")
-else
-    save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
-        "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
-        "experiment","exp_split","sensor_dimension")
-end
+% if ~any(experiment == experiment_list)
+%     error("Unknown experiment specified. Results not saved!")
+% else
+%     save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
+%         "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
+%         "experiment","sensor_dimension")
+% end
 
-%% Define plot parameters.
+%% Plotting
 params_latex = ["\alpha","t_0"];
 params_text = ["alpha","t0"];
 color_vec = ["#A2142F", "#0072BD", "#333333"];
@@ -822,7 +849,7 @@ color_vec = ["#A2142F", "#0072BD", "#333333"];
 home_dir = char(java.lang.System.getProperty('user.home'));
 folder_path = home_dir + "\Desktop\Updated Final AirComp Results\";
 
-%% Linear plots
+% Linear plots
 if experiment ~= "cwe_joint_grid"
     for agent_db_idx = 1:length(agent_db_values)
         % Create save directory if it does not exist.
@@ -912,13 +939,12 @@ if experiment ~= "cwe_joint_grid"
                 ax.LineWidth = 1;
 
                 % Save the figure.
-                if save_images
-                    exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
-                end
+                exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(agent_db_idx)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
+                % close(fig1)
             end
         end
     end
-%% Surface plots
+% Surface plots
 else
     % Create save directory if it does not exist.
     save_folder = folder_path + experiment + "_" + string(agent_db_values(end)) + "_db";
@@ -1018,9 +1044,8 @@ else
             axis normal
 
             % Save the figure.
-            if save_images
-                exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(end)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
-            end
+            exportgraphics(fig1, fullfile(save_folder, sprintf(experiment + "_" + string(agent_db_values(end)) + "_db_" + params_text(param_idx) + "_" + selected_schemes(scheme_idx) + ".png")), 'Resolution', 300);
+            % close(fig1)
         end
     end
 end
