@@ -7,7 +7,7 @@ close all
 % "omx_disjoint", "omx_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi"
 experiment_list = ["omx_disjoint", "omx_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", ...
                     "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi", "comp_cwe_disjoint", "comp_cwe_joint"];
-experiment = "omx_joint";
+experiment = "nae_disjoint";
 
 msg = ['Running ' char(experiment)];
 border = repmat('─', 1, length(msg)+4);
@@ -46,7 +46,7 @@ else
         sensor_vals = [2,4,6];
         agent_db_values = 0;
     else
-        sensor_vals = [5,10];
+        sensor_vals = [3];
         agent_db_values = 0;
     end
     dropout_vals = 0;
@@ -300,7 +300,6 @@ for agent_db_idx = 1:length(agent_db_values)
                             a2 = (-1 - sqrt(discr)) ./ (2*b);
                             a_select = a1;
 
-
                             for i = 1:S
                                 cR = real_channel(:,i,:,:);
                                 cI = imag_channel(:,i,:,:);
@@ -366,11 +365,6 @@ for agent_db_idx = 1:length(agent_db_values)
                                 aaadR = dt*(pagemtimes(aaaR,hdR_matrix_resh) - pagemtimes(aaaI,hdI_matrix_resh));
                                 aaadI = dt*(pagemtimes(aaaI,hdR_matrix_resh) + pagemtimes(aaaR,hdI_matrix_resh));
         
-                                % yiR = real(yi);
-                                % yiI = imag(yi);
-                                % yidR = dt*(pagemtimes(yiR,reshape(hdR_matrix,K,K,1,nDeployments)) - pagemtimes(yiI,reshape(hdI_matrix,K,K,1,nDeployments)));
-                                % yidI = dt*(pagemtimes(yiI,reshape(hdR_matrix,K,K,1,nDeployments)) + pagemtimes(yiR,reshape(hdI_matrix,K,K,1,nDeployments)));
-
                                 Hc = reshape(hdR_matrix + 1j*hdI_matrix, K, K, 1, nDeployments);
                                 yid = dt * pagemtimes(yi, Hc);
                                 yidR = real(yid);
@@ -412,26 +406,43 @@ for agent_db_idx = 1:length(agent_db_values)
 
                             [~,I] = max(llf_search_space, [], 3);
                             I = reshape(I, 1, 1, nTrials, nDeployments);
-                            
+                        end
+
+                        t0_estimates_for_plot = (I-1)*dt;
+
+                        if contains(experiment, "_disjoint")
+                            t0_estimates_for_alpha = t0_true*ones(1,1,nTrials,nDeployments);
+                            I_for_alpha = ((t0_true/dt)+1)*ones(1,1,nTrials,nDeployments);
+                        else
+                            t0_estimates_for_alpha = t0_estimates_for_plot;
+                            I_for_alpha = I;
+                        end
+
+                        %% alpha
+                        if scheme == "MPC" || scheme == "EPC"
+                            num_accum = sum(sum(real(yi_omx) .* mi .* sensor_signal(t-ti-tpi-t0_estimates_for_alpha), 1)*dt .* (ci ./ scaled_vi_psd_constant), 2);
+                            denom_accum = sum(abs(ci).^2 ./ scaled_vi_psd_constant .* Ei,2);
+                        
+                        elseif scheme == "PPC" || scheme == "NPC"
                             num_accum_compare = zeros(1,1,nTrials,nDeployments);
                             denom_accum_compare = zeros(1,1,nTrials,nDeployments);
                         
                             for dep_idx = 1:size(llf_search_space,5)
                                 for trial_idx = 1:size(llf_search_space,4)
-                                    num_accum_compare(1,1,trial_idx,dep_idx) = llf_search_space(1,1, I(1,1,trial_idx,dep_idx), trial_idx, dep_idx);
-                                    denom_accum_compare(1,1,trial_idx,dep_idx) = denom_space(1,1, I(1,1,trial_idx,dep_idx), 1, dep_idx);
+                                    num_accum_compare(1,1,trial_idx,dep_idx) = llf_search_space(1,1, I_for_alpha(1,1,trial_idx,dep_idx), trial_idx, dep_idx);
+                                    denom_accum_compare(1,1,trial_idx,dep_idx) = denom_space(1,1, I_for_alpha(1,1,trial_idx,dep_idx), 1, dep_idx);
                                 end
                             end
-                            alpha_estimates = num_accum_compare ./ denom_accum_compare;
                         end
+                        alpha_estimates = num_accum ./ denom_accum;
                     else
                         % Find peak index from noisy channel-weighted sum (cws).
                         % cws = reshape(matched_filter_integral(reshape(xi,K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-reshape(t,1,1,K)), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
                         % y = cws + pagetranspose(scaled_n(:,1,:,:));
                         % y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
 
-                        [cws_2, ~] = mf_integral_fft(noisy_unified_xi, mi .* sensor_signal(t-tpi), ci, 1, K, dt, Tp);
-                        y = pagetranspose(cws_2) + pagetranspose(scaled_n(:,1,:,:));
+                        [cws, ~] = mf_integral_fft(noisy_unified_xi, mi .* sensor_signal(t-tpi), ci, 1, K, dt, Tp);
+                        y = pagetranspose(cws) + pagetranspose(scaled_n(:,1,:,:));
                         y_searchable = y(:,1:(floor(t0_max/dt) + 1),:,:);
 
                         if contains(experiment, "nae") || scheme == "MPC" || scheme == "EPC"
@@ -439,25 +450,20 @@ for agent_db_idx = 1:length(agent_db_values)
                         else
                             [~,I] = max(abs(y_searchable));
                         end
+
+                        t0_estimates_for_plot = (I-1)*dt;
+                        if contains(experiment, "_disjoint") % experiment == "cwe_disjoint" || experiment == "nae_disjoint" || experiment == "omx_disjoint"
+                            t0_estimates_for_alpha = t0_true*ones(1,1,nTrials,nDeployments);
+                        else
+                            t0_estimates_for_alpha = t0_estimates_for_plot;
+                        end
                     end
-                    t0_estimates_for_plot = (I-1)*dt;
-                    % Set t0 estimates to true or estimated values depending on
-                    % experiment.
-                    if contains(experiment, "_disjoint") % experiment == "cwe_disjoint" || experiment == "nae_disjoint" || experiment == "omx_disjoint"
-                        t0_estimates = t0_true*ones(1,1,nTrials,nDeployments);
-                    else
-                        t0_estimates = t0_estimates_for_plot;
-                    end
+                    
                     
                     %% Estimate alpha
                     if contains(experiment, "omx")
-                        if scheme == "MPC" || scheme == "EPC"
-                            % num_accum = reshape(matched_filter_integral(reshape(real(yi_omx),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-tpi-t0_estimates),K,S,1,nTrials,nDeployments), ci ./ scaled_vi_psd_constant, 1, S, nTrials, nDeployments, dt),1,1,nTrials,nDeployments);
-                            num_accum = sum(sum(real(yi_omx) .* mi .* sensor_signal(t-ti-tpi-t0_estimates), 1)*dt .* (ci ./ scaled_vi_psd_constant), 2);
-                            denom_accum = sum(abs(ci).^2 ./ scaled_vi_psd_constant .* Ei,2);
-                            alpha_estimates = num_accum ./ denom_accum;
-                        end
-                    % Compute alpha estimates for AC-NAE
+                        disp("")
+
                     elseif contains(experiment, "nae")
                         if contains(experiment, "_joint")
                             % Select estimated peak index in vectorized manner.
@@ -573,7 +579,7 @@ for agent_db_idx = 1:length(agent_db_values)
                             % different t0 estimate.
                             % aaa = reshape(matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,K)), K,S,K,1,nDeployments), channel_gains, K, S, nTrials, nDeployments, dt),1,K,nTrials,nDeployments);
     
-                            [aaa, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
+                            [aaa, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates_for_alpha), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
                             
                             aaa = pagetranspose(aaa);
                             aaaR = real(aaa);
@@ -623,7 +629,7 @@ for agent_db_idx = 1:length(agent_db_values)
                             % Get time domain matrix for Qn.
                             [~, Qn_matrix] = get_time_domain(mag_sqr_H,dt,nDeployments);
                             % Omega = matched_filter_integral(reshape(mi .* sensor_signal(t-ti-t0_estimates),K,S,1,nTrials,nDeployments), reshape(mi .* sensor_signal(t-ti-reshape(t,1,1,K)), K,S,K,1,nDeployments), ci, K, S, nTrials, nDeployments, dt);
-                            [Omega, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
+                            [Omega, ~] = mf_integral_fft(mi .* sensor_signal(t-t0_estimates_for_alpha), mi .* sensor_signal(t), ci, 1, K, dt, Tp);
                         
                             num = dt*dt*pagemtimes(pagemtimes(real(y),reshape(Qn_matrix,K,K,1,nDeployments)),pagetranspose(reshape(Omega,1,K,nTrials,nDeployments)));
                             denom = dt*dt*pagemtimes(pagemtimes(reshape(Omega,1,K,nTrials,nDeployments),reshape(Qn_matrix,K,K,1,nDeployments)),pagetranspose(reshape(Omega,1,K,nTrials,nDeployments)));
