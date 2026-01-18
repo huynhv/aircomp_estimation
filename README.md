@@ -2,10 +2,11 @@ This repository contains the MATLAB code used to generate the numerical results 
 Network Edge for Collaborative Estimation". Plaintext versions of the .m files can be found in the .dat Files folder.
 
 # Known Errata
-A list of known errata has been compiled following the initial submission of the manuscript for review. The results generated after correcting the errata still align with the claims presented in original manuscript.
+A list of known errata has been compiled since initial submission of the manuscript for review (9/7/2025). The results generated after correcting the errata still align with the claims presented in original manuscript. We advise the user to compare the version date of the repository with the fix dates of the errata (where applicable) to understand which issues may still be persisting in the code.
 
 ## 9/30/2025  
-- When running the code with `experiment = random_dropout"`, the CRLB is not computed. Around line **487**, update the condition:
+
+- **FIXED 10/1/2025 **: When running the code with `experiment = random_dropout"`, the CRLB is not computed. Around line **487**, update the condition:
 ```matlab
 % Before
 elseif exp_split(1) == "cwe"
@@ -14,7 +15,7 @@ elseif exp_split(1) == "cwe"
 elseif exp_split(1) == "cwe" || experiment == "random_dropout"
 ```
 
-- There is an inconsistency between the results for `cwe_joint` and `random_dropout` because of the way random number generation is handled in MATLAB. For `Drop = 0`, the curves should line up. 
+- **FIXED 10/1/2025 **: There is an inconsistency between the results for `cwe_joint` and `random_dropout` because of the way random number generation is handled in MATLAB. For `Drop = 0`, the curves should line up. 
 Around line **28**, modify the code inside the if statement:
 ```matlab
 % Before
@@ -39,7 +40,7 @@ if experiment == "random_dropout"
     sensor_vals = [10];
 ```
 
-Around line **109**, add the following logic after creating `all_tpi`:
+- **FIXED 10/1/2025 **: Around line **109**, add the following logic after creating `all_tpi`:
 ```matlab
 % Before
 if experiment == "nae_joint_imperfect_tpi" || experiment == "cwe_joint_imperfect_tpi"
@@ -63,7 +64,7 @@ if experiment == "random_dropout"
 end
 ``` 
 
-- There is a missing factor of `dt`. Around line **212**, update the expression for `gamma_n`:
+- **FIXED 10/1/2025 **: There is a missing factor of `dt`. Around line **212**, update the expression for `gamma_n`:
 ```matlab
 % Before
 gamma_n = P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
