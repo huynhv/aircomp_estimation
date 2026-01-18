@@ -6,7 +6,7 @@ A list of known errata has been compiled since initial submission of the manuscr
 
 ## 9/30/2025  
 
-- **FIXED 10/1/2025 **: When running the code with `experiment = random_dropout"`, the CRLB is not computed. Around line **487**, update the condition:
+- **FIXED 1/6/2026**: When running the code with `experiment = random_dropout"`, the CRLB is not computed. Around line **487**, update the condition:
 ```matlab
 % Before
 elseif exp_split(1) == "cwe"
@@ -15,7 +15,7 @@ elseif exp_split(1) == "cwe"
 elseif exp_split(1) == "cwe" || experiment == "random_dropout"
 ```
 
-- **FIXED 10/1/2025 **: There is an inconsistency between the results for `cwe_joint` and `random_dropout` because of the way random number generation is handled in MATLAB. For `Drop = 0`, the curves should line up. 
+- **FIXED 1/6/2026**: There is an inconsistency between the results for `cwe_joint` and `random_dropout` because of the way random number generation is handled in MATLAB. For `Drop = 0`, the curves should line up. 
 Around line **28**, modify the code inside the if statement:
 ```matlab
 % Before
@@ -40,7 +40,7 @@ if experiment == "random_dropout"
     sensor_vals = [10];
 ```
 
-- **FIXED 10/1/2025 **: Around line **109**, add the following logic after creating `all_tpi`:
+- **FIXED 1/6/2026**: Around line **109**, add the following logic after creating `all_tpi`:
 ```matlab
 % Before
 if experiment == "nae_joint_imperfect_tpi" || experiment == "cwe_joint_imperfect_tpi"
@@ -64,7 +64,7 @@ if experiment == "random_dropout"
 end
 ``` 
 
-- **FIXED 10/1/2025 **: There is a missing factor of `dt`. Around line **212**, update the expression for `gamma_n`:
+- **FIXED 1/6/2026**: There is a missing factor of `dt`. Around line **212**, update the expression for `gamma_n`:
 ```matlab
 % Before
 gamma_n = P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
