@@ -1,11 +1,8 @@
+%%% 01-18-2026 - NOTE: this script is currently deprecated due to updates in the matched filtering code, this should still work with the old version of the alpha_t0.m code (from around Sept. 7, 2025 submission)
+
 % plot perfect tpi and imperfect tpi results
 clear all
 close all
-
-nae_joint_perf_tpi = load('nae_joint_results.mat');
-nae_joint_imperf_tpi = load('nae_joint_imperfect_tpi_results.mat');
-cwe_joint_perf_tpi = load('cwe_joint_results.mat');
-cwe_joint_imperf_tpi = load('cwe_joint_imperfect_tpi_results.mat');
 
 %% define plot parameters
 params_latex = ["\alpha","t_0"];
@@ -20,7 +17,7 @@ color_vec = [ ...
 ];
 
 home_dir = char(java.lang.System.getProperty('user.home'));
-folder_path = home_dir + "\Desktop\Final AirComp Results\";
+folder_path = home_dir + "\Desktop\Updated Final AirComp Results\";
 
 %% linear plots
 
@@ -30,9 +27,15 @@ close all
 experiment = "nae_joint_all_tpi";
 
 if experiment == "nae_all_tpi"
+    nae_joint_perf_tpi = load('nae_joint_results.mat');
+    nae_joint_imperf_tpi = load('nae_joint_imperfect_tpi_results.mat');
+
     exp1 = nae_joint_perf_tpi;
     exp2 = nae_joint_imperf_tpi;
 else
+    cwe_joint_perf_tpi = load('cwe_joint_results.mat');
+    cwe_joint_imperf_tpi = load('cwe_joint_imperfect_tpi_results.mat');
+
     exp1 = cwe_joint_perf_tpi;
     exp2 = cwe_joint_imperf_tpi;
 end
