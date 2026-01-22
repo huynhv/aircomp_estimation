@@ -1,6 +1,14 @@
 This repository contains the MATLAB code used to generate the numerical results in my paper titled "Over-the-Air Computation on 
 Network Edge for Collaborative Estimation". Plaintext versions of the .m files can be found in the .dat Files folder.
 
+
+# How to generate your own results:
+- Inside alpha_t0.m, change the "experiment" variable to run the desired 
+experiment corresponding to the paper. All other parameters are tailored to 
+match the exact implementation used in the paper. The individual experiment 
+plots will be generated and saved to the path specified in "folder_path".
+- Run the corresponding "plot_..." script to plot the figures for a given experiment
+
 # Known Errata
 A list of known errata has been compiled since initial submission of the manuscript for review (9/7/2025). The results generated after correcting the errata still align with the claims presented in original manuscript. We advise the user to compare the version date of the repository with the fix dates of the errata (where applicable) to understand which issues may still be persisting in the code.
 
@@ -72,14 +80,3 @@ gamma_n = P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,
 % After
 gamma_n = dt * P_s * E_mi_sqr * E_mag_g_sqr / db2magTen(channel_db_values(scheme_idx,channel_db_idx,agent_db_idx));
 ```
-
-# How to generate your own results:
-- Inside alpha_t0.m, change the "experiment" variable to run the desired 
-experiment corresponding to the paper. All other parameters are tailored to 
-match the exact implementation used in the paper. The individual experiment 
-plots will be generated and saved to the path specified in "folder_path".
-- To generate the overlayed results for AC-NAE and AC-CWE, run the 
-plot_nae_cwe_same_plot.m file after generating the results. The plots will be 
-generated and saved to the path specified in "folder_path".
-- Run nae_variance.m to generate the ablation study plot for the upper bound of the NAE variance.
-- Run plot_perfect_and_imperfect_tpi.m to generate the overlayed ablation study plots for imperfect clock synchronization.

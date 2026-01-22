@@ -8,7 +8,7 @@ close all
 % Choose which experiment to run.
 % "oma_disjoint", "oma_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi"
 experiment_list = ["oma_disjoint", "oma_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", ...
-                    "comp_cwe_disjoint", "comp_cwe_joint", .... 
+                    "comp_cwe_disjoint", "comp_cwe_joint", .... % comp_... experiments are for comparing with oma
                     "ext_oma_joint_1", "ext_oma_joint_2", "ext_cwe_joint_1", "ext_cwe_joint_2"]; % must run both ext..._1 and ext..._2 to get full 100 deployment results
                                                                                                  % (the plotting script will handle the averaging)
 experiment = "oma_disjoint";
