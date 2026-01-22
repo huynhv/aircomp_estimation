@@ -8,7 +8,8 @@ close all
 % Choose which experiment to run.
 % "oma_disjoint", "oma_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", "nae_joint_imperfect_tpi", "cwe_joint_imperfect_tpi"
 experiment_list = ["oma_disjoint", "oma_joint", "nae_disjoint", "nae_joint", "cwe_disjoint", "cwe_joint", "cwe_joint_grid", "random_dropout", ...
-                    "comp_cwe_disjoint", "comp_cwe_joint"];
+                    "comp_cwe_disjoint", "comp_cwe_joint", .... 
+                    "ext_oma_joint_1", "ext_oma_joint_2", "ext_cwe_joint_1", "ext_cwe_joint_2"]; % must ext..._1 and ext..._2 to get full 100 deployment results
 experiment = "oma_disjoint";
 
 msg = ['Running ' char(experiment)];
@@ -19,16 +20,26 @@ fprintf('│  %s  │\n', msg);
 fprintf('╰%s╯\n\n', border);
 
 % Set a seed for reproducibility.
-seed = 264;
+if contains(experiment, "joint_2")
+    seed = 42;
+else
+    seed = 264;
+end
 rng(seed);
 
 % Set number of deployments.
-nDeployments = 100;
+if contains(experiment, "ext")
+    nDeployments = 50;
+    K = 501;
+else
+    nDeployments = 100;
+    % Set the number of measurements per sensor. The sample index starts at 0 so
+    % sampling from index 0 to 100 requires K = 101 measurements.
+    K = 301;
+end
+
 % Set number of trials.
 nTrials = 500;
-% Set the number of measurements per sensor. The sample index starts at 0 so
-% sampling from index 0 to 100 requires K = 101 measurements.
-K = 301;
 
 % Set some bookkeeping variables depending on which experiment we are running.
 if experiment == "random_dropout"
@@ -41,7 +52,10 @@ else
     if experiment == "cwe_joint_grid"
         sensor_vals = 5;
         agent_db_values = [0,5,10,15,20];
-    elseif contains(experiment, "oma")
+    elseif contains(experiment, "ext")
+        sensor_vals = [4,6,8,10];
+        agent_db_values = 0;
+    elseif experiment == "oma_disjoint" || experiment == "oma_joint"
         sensor_vals = [2,4,6];
         agent_db_values = 0;
     elseif contains(experiment, "comp")
@@ -54,9 +68,6 @@ else
     dropout_vals = 0;
     sensor_dimension = length(sensor_vals);
 end
-
-% Parse experiment name for organization.
-% exp_split = strsplit(experiment,'_');
 
 % Set observation window length in seconds.
 T0 = 5;
@@ -117,7 +128,12 @@ all_ti = unifrnd(min_ti,max_ti,1,max_sensor_limit,1,nDeployments);
 % results for NPC, we do not necessarily plot them. there is no gurantee that
 % more sensors will perform better for NPC due to the uncompensated channel
 % phase.
-selected_schemes = ["MPC","EPC","PPC","NPC"];
+if contains(experiment, "ext")
+    selected_schemes = "EPC";
+else
+    selected_schemes = ["MPC","EPC","PPC","NPC"];
+end
+
 
 % Generate clock offset vector if needed
 if experiment == "nae_joint_imperfect_tpi" || experiment == "cwe_joint_imperfect_tpi"
@@ -155,7 +171,7 @@ crlb = zeros(1,length(agent_db_values),size(channel_db_values,2),2,length(select
 empirical_var = crlb;
 empirical_mse = crlb;
 empirical_bias = crlb;
-my_var = crlb;
+% my_var = crlb;
 
 % Start run timer.
 loopTic = tic;
@@ -746,22 +762,22 @@ if nDeployments == 1
     avg_dep_mse = empirical_mse;
     avg_dep_bias = empirical_bias;
     avg_dep_crlb = crlb;
-    avg_dep_my_var = my_var;
+    % avg_dep_my_var = my_var;
 else
     avg_dep_var = mean(empirical_var,length(size(empirical_var)));
     avg_dep_mse = mean(empirical_mse,length(size(empirical_mse)));
     avg_dep_bias = mean(empirical_bias,length(size(empirical_bias)));
     avg_dep_crlb = mean(crlb,length(size(crlb)));
-    avg_dep_my_var = mean(my_var,length(size(crlb)));
+    % avg_dep_my_var = mean(my_var,length(size(crlb)));
 end
 
 %% Save experiment results.
 if ~any(experiment == experiment_list)
     error("Unknown experiment specified. Results not saved!")
 else
-    save(experiment + "_results.mat", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
+    save(experiment + "_results.mat", "empirical_var", "empirical_mse", "empirical_bias", "crlb", "avg_dep_var", "avg_dep_mse", "avg_dep_bias", "avg_dep_crlb",...
         "agent_db_values", "selected_schemes", "dropout_vals", "sensor_vals", "channel_db_values",...
-        "experiment","sensor_dimension")
+        "experiment","sensor_dimension", "K", "nTrials", "nDeployments")
 end
 
 %% Plotting
