@@ -1,7 +1,6 @@
 This repository contains the MATLAB code used to generate the numerical results in my paper titled "Over-the-Air Computation on 
 Network Edge for Collaborative Estimation". Plaintext versions of the .m files can be found in the .dat Files folder.
 
-
 # How to generate your own results:
 - Inside alpha_t0.m, change the "experiment" variable to run the desired 
 experiment corresponding to the paper. All other parameters are tailored to 
@@ -9,6 +8,8 @@ match the exact implementation used in the paper. The individual experiment
 plots will be generated and saved to the path specified in "folder_path".
 - Run the corresponding "plot_..." script to plot the figures for a given experiment.
 - The "plot_..." scripts will specify what result files are required to generate the figures.
+
+If you encounter any issues with the script, please feel free to reach out to me at vcvhuynh (at) ucdavis (dot) edu.
 
 # Known Errata
 A list of known errata has been compiled since initial submission of the manuscript for review (9/7/2025). The results generated after correcting the errata still align with the claims presented in original manuscript. We advise the user to compare the version date of the repository with the fix dates of the errata (where applicable) to understand which issues may still be persisting in the code.
