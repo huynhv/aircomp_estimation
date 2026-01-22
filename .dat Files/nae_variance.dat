@@ -1,3 +1,5 @@
+% Script for NAE variance ablation study from 9/7/2025 revision.
+
 % check for monotonically decreasing variance
 seed = 264;
 rng(seed);

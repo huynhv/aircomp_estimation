@@ -10,7 +10,7 @@ color_vec = [
     "#A2142F"  % dark red
     "#7E2F8E"  % purple
     "#0072BD"  % blue
-    "#77AC30"  % green
+    "#008000"  % green
     "#D95319"  % orange
     "#4DBEEE"  % light blue (cyan)
 ];
@@ -22,7 +22,7 @@ folder_path = home_dir + "\Desktop\Updated Final AirComp Results\For Manuscript\
 
 close all
 
-% nae_cwe_disjoint", nae_cwe_joint"
+% options: "nae_cwe_disjoint", "nae_cwe_joint"
 experiment = "nae_cwe_disjoint";
 
 if experiment == "nae_cwe_disjoint"
