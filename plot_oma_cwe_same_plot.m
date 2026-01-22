@@ -20,7 +20,8 @@ home_dir = char(java.lang.System.getProperty('user.home'));
 %% linear plots
 close all
 
-experiment = "oma_cwe_disjoint";
+% options: "oma_cwe_disjoint", "oma_cwe_joint"
+experiment = "oma_cwe_joint";
 disp("Plotting " + experiment)
 
 if experiment == "oma_cwe_disjoint"
