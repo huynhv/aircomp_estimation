@@ -7,7 +7,8 @@ Network Edge for Collaborative Estimation". Plaintext versions of the .m files c
 experiment corresponding to the paper. All other parameters are tailored to 
 match the exact implementation used in the paper. The individual experiment 
 plots will be generated and saved to the path specified in "folder_path".
-- Run the corresponding "plot_..." script to plot the figures for a given experiment
+- Run the corresponding "plot_..." script to plot the figures for a given experiment.
+- The "plot_..." scripts will specify what result files are required to generate the figures.
 
 # Known Errata
 A list of known errata has been compiled since initial submission of the manuscript for review (9/7/2025). The results generated after correcting the errata still align with the claims presented in original manuscript. We advise the user to compare the version date of the repository with the fix dates of the errata (where applicable) to understand which issues may still be persisting in the code.
