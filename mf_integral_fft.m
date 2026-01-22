@@ -1,4 +1,4 @@
-% mf_integral_fft Returns the matched filter output of tempA and tempB using the FFT.
+% (REVISED MATCHED FILTERING METHOD) MF_INTEGRAL_FFT Returns the matched filter output of tempA and tempB using the FFT. 
 function [out_tensor, ui_tensor] = mf_integral_fft(A_tensor, B_tensor, ci, ai, K, dt, Tp)
     % tempC = pagemtimes(pagetranspose(tempA),tempB);
     % 

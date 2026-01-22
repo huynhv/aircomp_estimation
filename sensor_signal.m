@@ -1,4 +1,4 @@
-% SENSOR_SIGNAL computes the sensor signal defined in the paper.
+% SENSOR_SIGNAL Computes the sensor signal defined in the paper.
 function s = sensor_signal(t)
     T_s = 1;
     s = sin(pi*t);

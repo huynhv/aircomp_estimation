@@ -1,4 +1,4 @@
-% MATCHED_FILTER_INTEGRAL Returns the matched filter output of tempA and tempB,
+% (OLD MATCHED FILTERING METHOD) MATCHED_FILTER_INTEGRAL Returns the matched filter output of tempA and tempB,
 % which is computed in a vectorized manner.
 function [out] = matched_filter_integral(tempA, tempB, channel_gains, K, S, nTrials, nDeployments, dt)
     tempC = pagemtimes(pagetranspose(tempA),tempB);
