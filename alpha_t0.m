@@ -270,6 +270,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     % n_psd_function_td = gamma_n/dt;
                     scaled_n_psd_constant = gamma_n * n_psd_constant; % == N0/2
 
+                    % Define OMA noise constant
                     scaled_vi_psd_constant = (abs(ci).^2 * scaled_w_psd_constant + scaled_n_psd_constant/2);
 
                     %%%%%%%%%%%%%%%%% ESTIMATION %%%%%%%%%%%%%%%%%
@@ -435,7 +436,7 @@ for agent_db_idx = 1:length(agent_db_values)
                             I_for_alpha = I;
                         end
 
-                        %% alpha
+                        %% Estimate alpha for OMA
                         if scheme == "MPC" || scheme == "EPC"
                             num_accum = sum(sum(real(yi_oma) .* mi .* sensor_signal(t-ti-tpi-t0_estimates_for_alpha), 1)*dt .* (ci ./ scaled_vi_psd_constant), 2);
                             denom_accum = sum(abs(ci).^2 ./ scaled_vi_psd_constant .* Ei,2);
@@ -479,7 +480,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     
                     %% Estimate alpha
                     if contains(experiment, "oma")
-                        % placeholder for oma
+                        % placeholder for oma, can be removed in future revisions
                         disp("")
 
                     elseif contains(experiment, "nae")
