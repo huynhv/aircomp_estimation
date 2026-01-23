@@ -480,7 +480,7 @@ for agent_db_idx = 1:length(agent_db_values)
                     
                     %% Estimate alpha
                     if contains(experiment, "oma")
-                        % placeholder for oma, can be removed in future revisions
+                        % placeholder for oma, can be removed in future revisions since t0 and alpha estimation loops have been combined
                         disp("")
 
                     elseif contains(experiment, "nae")
