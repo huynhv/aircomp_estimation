@@ -51,6 +51,7 @@ selected_schemes = exp1.selected_schemes;
 sensor_vals = exp1.sensor_vals;
 channel_db_values = exp1.channel_db_values;
 
+% options: "EPC"
 what_to_plot = "EPC";
 selected_scheme_idx = 1;
 folder_path = home_dir + "\Desktop\Updated Final AirComp Results\Response Letter\Extension\";

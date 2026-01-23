@@ -45,7 +45,8 @@ selected_schemes = exp1.selected_schemes;
 sensor_vals = exp1.sensor_vals;
 channel_db_values = exp1.channel_db_values;
 
-what_to_plot = "all"; % "all", "EPC";
+% options: "all", "EPC";
+what_to_plot = "all"; 
 
 if what_to_plot == "all"
     selected_scheme_idx = 1:4;

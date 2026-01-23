@@ -12,7 +12,8 @@ home_dir = char(java.lang.System.getProperty('user.home'));
 % Toggle if you want to convert meshgrid values to log (you should).
 convert_to_log = true;
 
-what_to_plot = "EPC"; % "all", "EPC";
+% options: "all", "EPC"
+what_to_plot = "EPC"; 
 
 if what_to_plot == "all"
     selected_scheme_idx = 1:4;
