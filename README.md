@@ -14,6 +14,9 @@ If you encounter any issues with the script, please feel free to reach out to me
 # Known Errata
 A list of known errata has been compiled since initial submission of the manuscript for review (9/7/2025). The results generated after correcting the errata still align with the claims presented in original manuscript. We advise the user to compare the version date of the repository with the fix dates of the errata (where applicable) to understand which issues may still be persisting in the code.
 
+## 1/27/2026
+- The variable names num_accum_compare and denom_accum_compare should be changed to num_accum and denom_accum
+
 ## 9/30/2025  
 
 - **FIXED 1/6/2026**: When running the code with `experiment = random_dropout"`, the CRLB is not computed. Around line **487**, update the condition:
