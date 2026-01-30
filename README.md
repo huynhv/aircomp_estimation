@@ -15,7 +15,30 @@ If you encounter any issues with the script, please feel free to reach out to me
 A list of known errata has been compiled since initial submission of the manuscript for review (9/7/2025). The results generated after correcting the errata still align with the claims presented in original manuscript. We advise the user to compare the version date of the repository with the fix dates of the errata (where applicable) to understand which issues may still be persisting in the code.
 
 ## 1/27/2026
-- The variable names num_accum_compare and denom_accum_compare should be changed to num_accum and denom_accum
+- The variable names num_accum_compare and denom_accum_compare should be changed to num_accum and denom_accum. We have verified that the histograms for the estimated OMA alpha and t0 of EPC, PPC, and NPC are different even though their MSE, variance, and CRLB trends look the same. We note that the difference in the estimate histograms was very small, hence no noticeable differences were presented in the MSE, variance, and CRLB curves.
+```matlab
+% Before
+num_accum_compare = zeros(1,1,nTrials,nDeployments);
+denom_accum_compare = zeros(1,1,nTrials,nDeployments);
+
+for dep_idx = 1:size(llf_search_space,5)
+    for trial_idx = 1:size(llf_search_space,4)
+        num_accum_compare(1,1,trial_idx,dep_idx) = llf_search_space(1,1, I_for_alpha(1,1,trial_idx,dep_idx), trial_idx, dep_idx);
+        denom_accum_compare(1,1,trial_idx,dep_idx) = denom_space(1,1, I_for_alpha(1,1,trial_idx,dep_idx), 1, dep_idx);
+    end
+end
+
+% After
+num_accum = zeros(1,1,nTrials,nDeployments);
+denom_accum = zeros(1,1,nTrials,nDeployments);
+
+for dep_idx = 1:size(llf_search_space,5)
+    for trial_idx = 1:size(llf_search_space,4)
+        num_accum(1,1,trial_idx,dep_idx) = llf_search_space(1,1, I_for_alpha(1,1,trial_idx,dep_idx), trial_idx, dep_idx);
+        denom_accum(1,1,trial_idx,dep_idx) = denom_space(1,1, I_for_alpha(1,1,trial_idx,dep_idx), 1, dep_idx);
+    end
+end
+```
 
 ## 9/30/2025  
 
